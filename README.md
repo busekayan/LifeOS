@@ -5,16 +5,16 @@ LifeOS is a personal life management mobile application designed to help users o
 ## Overview
 This repository contains the initial setup for LifeOS, including the backend API, mobile application, and project documentation. The project is currently in development and focuses on establishing the foundation for life and task management functionalities.
 
-## Features (Planned / Initial)
-- Task and habit tracking (core structure prepared)
-- Personal finance management (database setup ready)
-- Shared household expense tracking (planned)
-- Daily life organization (planned)
+## Features 
+- Task and habit tracking 
+- Personal finance management 
+- Shared household expense tracking 
+- Daily life organization 
 
 ## Technologies
 - **Flutter** – Mobile application development
 - **Node.js / Express** – Backend RESTful API
 - **PostgreSQL** – Database
-- **Git / GitHub** – Version control
 
-## Project Structure
+
+
