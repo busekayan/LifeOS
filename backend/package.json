@@ -3,14 +3,24 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  
+"scripts": {
+  "start": "node server.js",
+  "migrate": "node-pg-migrate up",
+  "migrate:down": "node-pg-migrate down",
+  "migrate:create": "node-pg-migrate create"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "node-pg-migrate": "^8.0.4"
   }
+  
+  
 }
