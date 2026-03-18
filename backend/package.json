@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  
-"scripts": {
-  "start": "node server.js",
-  "migrate": "node-pg-migrate up",
-  "migrate:down": "node-pg-migrate down",
-  "migrate:create": "node-pg-migrate create"
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create"
   },
   "keywords": [],
   "author": "",
@@ -16,11 +15,10 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^5.2.1",
+    "mssql": "^12.2.0",
     "pg": "^8.20.0"
   },
   "devDependencies": {
     "node-pg-migrate": "^8.0.4"
   }
-  
-  
 }
