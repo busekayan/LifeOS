@@ -7,7 +7,7 @@ app.use(express.json());
 const config = {
   user: "sa",
   password: "sifresifre123",
-  server: "BUSE\\SQLEXPRESS",
+  server: "BUSE",
   database: "LifeOS",
   options: {
     instanceName: "SQLEXPRESS",
@@ -25,11 +25,11 @@ async function initDB() {
     console.log("Connected to MSSQL");
   } catch (err) {
     console.error("DB connection FAILED:");
-    console.error(err); // 🔴 BURASI ÇOK ÖNEMLİ
+    console.error(err);
   }
 }
 
-// Test endpoint
+// TEST endpoint
 app.get("/test-db", async (req, res) => {
   if (!pool) {
     return res.status(500).json({ error: "Database not connected" });
@@ -38,6 +38,30 @@ app.get("/test-db", async (req, res) => {
   try {
     const result = await pool.request().query("SELECT GETDATE() AS currentTime");
     res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 🔴 CREATE USER ENDPOINT
+app.post("/users", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Database not connected" });
+  }
+
+  const { email, password } = req.body;
+
+  try {
+    await pool
+      .request()
+      .input("email", sql.NVarChar, email)
+      .input("password", sql.NVarChar, password)
+      .query(`
+        INSERT INTO users (email, password_hash)
+        VALUES (@email, @password)
+      `);
+
+    res.status(201).json({ message: "User created successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
