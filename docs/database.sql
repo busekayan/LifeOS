@@ -20,3 +20,16 @@ CREATE TABLE habits (
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
 );
+
+--habits_log table
+CREATE TABLE habit_logs (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    habit_id INT NOT NULL,
+    value INT,
+    log_date DATE NOT NULL,
+    created_at DATETIME2 DEFAULT GETDATE(),
+
+    CONSTRAINT FK_logs_habit
+    FOREIGN KEY (habit_id) REFERENCES habits(id)
+    ON DELETE CASCADE
+);
