@@ -18,7 +18,7 @@ const config = {
 
 let pool;
 
-// DB bağlantısı
+// DB connection
 async function initDB() {
   try {
     pool = await sql.connect(config);
@@ -29,12 +29,8 @@ async function initDB() {
   }
 }
 
-// TEST endpoint
+// TEST
 app.get("/test-db", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ error: "Database not connected" });
-  }
-
   try {
     const result = await pool.request().query("SELECT GETDATE() AS currentTime");
     res.json(result.recordset);
@@ -42,12 +38,35 @@ app.get("/test-db", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Get all users
-app.get("/users", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ error: "Database not connected" });
+
+/* ===================== USERS ===================== */
+
+// CREATE USER
+app.post("/users", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "email and password are required" });
   }
 
+  try {
+    await pool
+      .request()
+      .input("email", sql.NVarChar, email)
+      .input("password", sql.NVarChar, password)
+      .query(`
+        INSERT INTO users (email, password_hash)
+        VALUES (@email, @password)
+      `);
+
+    res.status(201).json({ message: "User created successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET USERS
+app.get("/users", async (req, res) => {
   try {
     const result = await pool.request().query(`
       SELECT id, email, created_at
@@ -61,12 +80,39 @@ app.get("/users", async (req, res) => {
   }
 });
 
-// Get all habits
-app.get("/habits", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ error: "Database not connected" });
+/* ===================== HABITS ===================== */
+
+// CREATE HABIT
+app.post("/habits", async (req, res) => {
+  const { user_id, name, description, frequency_type, target_value } = req.body;
+
+  if (!user_id || !name || !frequency_type) {
+    return res.status(400).json({
+      error: "user_id, name, and frequency_type are required"
+    });
   }
 
+  try {
+    await pool
+      .request()
+      .input("user_id", sql.Int, user_id)
+      .input("name", sql.NVarChar, name)
+      .input("description", sql.NVarChar, description || null)
+      .input("frequency_type", sql.NVarChar, frequency_type)
+      .input("target_value", sql.Int, target_value || null)
+      .query(`
+        INSERT INTO habits (user_id, name, description, frequency_type, target_value)
+        VALUES (@user_id, @name, @description, @frequency_type, @target_value)
+      `);
+
+    res.status(201).json({ message: "Habit created successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET HABITS
+app.get("/habits", async (req, res) => {
   try {
     const result = await pool.request().query(`
       SELECT *
@@ -80,12 +126,37 @@ app.get("/habits", async (req, res) => {
   }
 });
 
-// Get all habit logs
-app.get("/habit_logs", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ error: "Database not connected" });
+/* ===================== HABIT LOGS ===================== */
+
+// CREATE HABIT LOG
+app.post("/habit-logs", async (req, res) => {
+  const { habit_id, value, log_date } = req.body;
+
+  if (!habit_id || !log_date) {
+    return res.status(400).json({
+      error: "habit_id and log_date are required"
+    });
   }
 
+  try {
+    await pool
+      .request()
+      .input("habit_id", sql.Int, habit_id)
+      .input("value", sql.Int, value || null)
+      .input("log_date", sql.Date, log_date)
+      .query(`
+        INSERT INTO habit_logs (habit_id, value, log_date)
+        VALUES (@habit_id, @value, @log_date)
+      `);
+
+    res.status(201).json({ message: "Habit log created successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET HABIT LOGS
+app.get("/habit-logs", async (req, res) => {
   try {
     const result = await pool.request().query(`
       SELECT *
@@ -94,30 +165,6 @@ app.get("/habit_logs", async (req, res) => {
     `);
 
     res.json(result.recordset);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 🔴 CREATE USER ENDPOINT
-app.post("/users", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ error: "Database not connected" });
-  }
-
-  const { email, password } = req.body;
-
-  try {
-    await pool
-      .request()
-      .input("email", sql.NVarChar, email)
-      .input("password", sql.NVarChar, password)
-      .query(`
-        INSERT INTO users (email, password_hash)
-        VALUES (@email, @password)
-      `);
-
-    res.status(201).json({ message: "User created successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
