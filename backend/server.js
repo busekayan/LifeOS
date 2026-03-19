@@ -1,5 +1,6 @@
 const express = require("express");
 const sql = require("mssql");
+const bcrypt = require("bcrypt");
 
 const app = express();
 app.use(express.json());
@@ -50,10 +51,12 @@ app.post("/users", async (req, res) => {
   }
 
   try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     await pool
       .request()
       .input("email", sql.NVarChar, email)
-      .input("password", sql.NVarChar, password)
+      .input("password", sql.NVarChar, hashedPassword)
       .query(`
         INSERT INTO users (email, password_hash)
         VALUES (@email, @password)
@@ -176,4 +179,36 @@ initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+});
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+
+  try {
+    const result = await pool
+      .request()
+      .input("email", sql.NVarChar, email)
+      .query(`
+        SELECT * FROM users WHERE email = @email
+      `);
+
+    const user = result.recordset[0];
+
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    res.json({ message: "Login successful" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
