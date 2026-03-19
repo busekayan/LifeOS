@@ -42,6 +42,62 @@ app.get("/test-db", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Get all users
+app.get("/users", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Database not connected" });
+  }
+
+  try {
+    const result = await pool.request().query(`
+      SELECT id, email, created_at
+      FROM users
+      ORDER BY id DESC
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all habits
+app.get("/habits", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Database not connected" });
+  }
+
+  try {
+    const result = await pool.request().query(`
+      SELECT *
+      FROM habits
+      ORDER BY id DESC
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all habit logs
+app.get("/habit_logs", async (req, res) => {
+  if (!pool) {
+    return res.status(500).json({ error: "Database not connected" });
+  }
+
+  try {
+    const result = await pool.request().query(`
+      SELECT *
+      FROM habit_logs
+      ORDER BY id DESC
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 🔴 CREATE USER ENDPOINT
 app.post("/users", async (req, res) => {
