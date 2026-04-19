@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'register_screen.dart';
+import '../services/token_storage.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -69,13 +70,27 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        final accessToken = data["accessToken"];
+        final refreshToken = data["refreshToken"];
+
+        await TokenStorage.saveTokens(
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+        );
+
+        showSuccessBanner("Giriş başarılı");
+
         Future.delayed(const Duration(milliseconds: 700), () {
           if (mounted) {
-            // Burada ana sayfaya geçeceksin.
-            // Şimdilik sadece örnek bıraktım.
-            // Navigator.pushReplacement(...);
+            // Navigator.pushReplacement(
+            //   context,
+            //   MaterialPageRoute(builder: (context) => HomeScreen()),
+            // );
           }
         });
+
         return;
       }
 

@@ -123,22 +123,45 @@ const loginUser = async (req, res) => {
         message: "Email veya şifre hatalı",
       });
     }
-
-    // JWT token oluşturuyoruz
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       {
         userId: user.id,
         email: user.email,
       },
       process.env.JWT_SECRET,
       {
-        expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+        expiresIn: "30m",
       }
     );
 
+    const refreshToken = jwt.sign(
+      {
+        userId: user.id,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      {
+        expiresIn: "30d",
+      }
+    );
+
+    const refreshTokenExpiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    );
+
+    await pool
+      .request()
+      .input("userId", sql.Int, user.id)
+      .input("token", sql.NVarChar, refreshToken)
+      .input("expiresAt", sql.DateTime, refreshTokenExpiresAt)
+      .query(`
+        INSERT INTO refresh_tokens (user_id, token, expires_at)
+        VALUES (@userId, @token, @expiresAt)
+      `);
+
     return res.status(200).json({
       message: "Giriş başarılı",
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         firstName: user.first_name,
@@ -146,6 +169,8 @@ const loginUser = async (req, res) => {
         email: user.email,
       },
     });
+    // // JWT token oluşturuyoruz
+
   } catch (err) {
     console.error("LOGIN ERROR:", err);
 
@@ -154,5 +179,116 @@ const loginUser = async (req, res) => {
     });
   }
 };
+const refreshTokenUser = async (req, res) => {
+  const { refreshToken } = req.body;
 
-module.exports = { registerUser, loginUser };
+  try {
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: "Refresh token gerekli",
+      });
+    }
+
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET
+    );
+
+    const pool = await poolPromise;
+
+    if (!pool) {
+      return res.status(500).json({
+        message: "Veritabanı bağlantısı kurulamadı",
+      });
+    }
+
+    const tokenResult = await pool
+      .request()
+      .input("token", sql.NVarChar, refreshToken)
+      .query(`
+        SELECT id, user_id, token, expires_at, is_revoked
+        FROM refresh_tokens
+        WHERE token = @token
+      `);
+
+    if (tokenResult.recordset.length === 0) {
+      return res.status(403).json({
+        message: "Geçersiz refresh token",
+      });
+    }
+
+    const storedToken = tokenResult.recordset[0];
+
+    if (storedToken.is_revoked) {
+      return res.status(403).json({
+        message: "Refresh token iptal edilmiş",
+      });
+    }
+
+    if (new Date(storedToken.expires_at) < new Date()) {
+      return res.status(403).json({
+        message: "Refresh token süresi dolmuş",
+      });
+    }
+
+    const newAccessToken = jwt.sign(
+      {
+        userId: decoded.userId,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "30m",
+      }
+    );
+
+    return res.status(200).json({
+      message: "Yeni access token oluşturuldu",
+      accessToken: newAccessToken,
+    });
+  } catch (err) {
+    console.error("REFRESH TOKEN ERROR:", err);
+
+    return res.status(403).json({
+      message: "Geçersiz veya süresi dolmuş refresh token",
+    });
+  }
+};
+const logoutUser = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(400).json({
+        message: "Refresh token gerekli",
+      });
+    }
+
+    const pool = await poolPromise;
+
+    if (!pool) {
+      return res.status(500).json({
+        message: "Veritabanı bağlantısı kurulamadı",
+      });
+    }
+
+    await pool
+      .request()
+      .input("token", sql.NVarChar, refreshToken)
+      .query(`
+        UPDATE refresh_tokens
+        SET is_revoked = 1
+        WHERE token = @token
+      `);
+
+    return res.status(200).json({
+      message: "Çıkış başarılı",
+    });
+  } catch (err) {
+    console.error("LOGOUT ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server hatası",
+    });
+  }
+};
+module.exports = { registerUser, loginUser, refreshTokenUser, logoutUser };

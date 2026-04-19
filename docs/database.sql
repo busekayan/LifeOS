@@ -35,3 +35,14 @@ CREATE TABLE habit_logs (
     FOREIGN KEY (habit_id) REFERENCES habits(id)
     ON DELETE CASCADE
 );
+
+--Refresh token table
+CREATE TABLE refresh_tokens (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    user_id INT NOT NULL,
+    token NVARCHAR(MAX) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_revoked BIT DEFAULT 0,
+    created_at DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
