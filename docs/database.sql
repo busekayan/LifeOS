@@ -1,12 +1,14 @@
 -- Users table
 CREATE TABLE users (
     id INT IDENTITY(1,1) PRIMARY KEY,
+    first_name NVARCHAR(100) NOT NULL,
+    last_name NVARCHAR(100) NOT NULL,
     email NVARCHAR(255) NOT NULL UNIQUE,
     password_hash NVARCHAR(255) NOT NULL,
     created_at DATETIME2 DEFAULT GETDATE()
 );
 
---Habits Table
+-- Habits table
 CREATE TABLE habits (
     id INT IDENTITY(1,1) PRIMARY KEY,
     user_id INT NOT NULL,
@@ -21,7 +23,7 @@ CREATE TABLE habits (
     ON DELETE CASCADE
 );
 
---habits_log table
+-- Habit_logs table
 CREATE TABLE habit_logs (
     id INT IDENTITY(1,1) PRIMARY KEY,
     habit_id INT NOT NULL,
