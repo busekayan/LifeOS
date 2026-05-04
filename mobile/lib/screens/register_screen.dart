@@ -101,7 +101,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      if (response.statusCode == 400) {
+      if (response.statusCode == 409 || response.statusCode == 409) {
         try {
           final data = jsonDecode(response.body);
           final message = data["message"] ?? "Kayıt başarısız.";

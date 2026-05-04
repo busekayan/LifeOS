@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/token_storage.dart';
 
@@ -30,6 +32,8 @@ class AuthCheckScreen extends StatefulWidget {
 }
 
 class _AuthCheckScreenState extends State<AuthCheckScreen> {
+  static const String baseUrl = "http://10.0.2.2:3000";
+
   bool isLoading = true;
   bool isLoggedIn = false;
 
@@ -43,8 +47,9 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
     final accessToken = await TokenStorage.getAccessToken();
     final refreshToken = await TokenStorage.getRefreshToken();
 
-    // Her iki token da yoksa direkt login ekranına gönder
-    if (accessToken == null || refreshToken == null) {
+    // İki token da yoksa kullanıcı giriş yapmamış kabul edilir.
+    if ((accessToken == null || accessToken.isEmpty) &&
+        (refreshToken == null || refreshToken.isEmpty)) {
       if (!mounted) return;
       setState(() {
         isLoggedIn = false;
@@ -53,49 +58,113 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       return;
     }
 
-    try {
-      // Uygulama açıldığında refresh token ile yeni access token almayı dene
-      final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/users/refresh"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"refreshToken": refreshToken}),
-      );
+    // 1) Önce access token geçerli mi kontrol et.
+    if (accessToken != null && accessToken.isNotEmpty) {
+      try {
+        final meResponse = await http
+            .get(
+              Uri.parse("$baseUrl/users/me"),
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer $accessToken",
+              },
+            )
+            .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final newAccessToken = data["accessToken"];
-
-        // Yeni access token'ı kaydet, refresh token aynı kalabilir
-        await TokenStorage.saveTokens(
-          accessToken: newAccessToken,
-          refreshToken: refreshToken,
-        );
-
-        if (!mounted) return;
-        setState(() {
-          isLoggedIn = true;
-          isLoading = false;
-        });
-      } else {
-        // Refresh başarısızsa tokenları temizle ve login ekranına dön
-        await TokenStorage.clearTokens();
-
-        if (!mounted) return;
-        setState(() {
-          isLoggedIn = false;
-          isLoading = false;
-        });
+        if (meResponse.statusCode == 200) {
+          if (!mounted) return;
+          setState(() {
+            isLoggedIn = true;
+            isLoading = false;
+          });
+          return;
+        }
+      } on TimeoutException {
+        // Timeout olursa aşağıda refresh denenecek.
+      } catch (_) {
+        // Access doğrulama başarısızsa aşağıda refresh denenecek.
       }
-    } catch (e) {
-      // Sunucu veya ağ hatasında tokenları temizle ve login ekranına dön
-      await TokenStorage.clearTokens();
-
-      if (!mounted) return;
-      setState(() {
-        isLoggedIn = false;
-        isLoading = false;
-      });
     }
+
+    // 2) Access token geçersizse refresh token ile yeni token almayı dene.
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      try {
+        final refreshResponse = await http
+            .post(
+              Uri.parse("$baseUrl/users/refresh"),
+              headers: {"Content-Type": "application/json"},
+              body: jsonEncode({"refreshToken": refreshToken}),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        if (refreshResponse.statusCode == 200) {
+          final refreshData = jsonDecode(refreshResponse.body);
+
+          final dynamic rawAccessToken = refreshData["accessToken"];
+          final dynamic rawRefreshToken = refreshData["refreshToken"];
+
+          final String? newAccessToken = rawAccessToken is String
+              ? rawAccessToken
+              : null;
+
+          final String newRefreshToken =
+              rawRefreshToken is String && rawRefreshToken.isNotEmpty
+              ? rawRefreshToken
+              : refreshToken;
+
+          // Refresh başarılı görünse bile access token düzgün dönmediyse kullanıcıyı içeri alma.
+          if (newAccessToken == null || newAccessToken.isEmpty) {
+            await TokenStorage.clearTokens();
+
+            if (!mounted) return;
+            setState(() {
+              isLoggedIn = false;
+              isLoading = false;
+            });
+            return;
+          }
+
+          // Yeni tokenları kaydet.
+          await TokenStorage.saveTokens(
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+          );
+
+          // 3) Yeni access token ile kullanıcıyı tekrar doğrula.
+          final meResponse = await http
+              .get(
+                Uri.parse("$baseUrl/users/me"),
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer $newAccessToken",
+                },
+              )
+              .timeout(const Duration(seconds: 10));
+
+          if (meResponse.statusCode == 200) {
+            if (!mounted) return;
+            setState(() {
+              isLoggedIn = true;
+              isLoading = false;
+            });
+            return;
+          }
+        }
+      } on TimeoutException {
+        // Aşağıda session geçersiz akışına düşecek.
+      } catch (_) {
+        // Aşağıda session geçersiz akışına düşecek.
+      }
+    }
+
+    // 4) Buraya geldiyse session geçersizdir.
+    await TokenStorage.clearTokens();
+
+    if (!mounted) return;
+    setState(() {
+      isLoggedIn = false;
+      isLoading = false;
+    });
   }
 
   @override
@@ -105,14 +174,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
     }
 
     if (isLoggedIn) {
-      return const Scaffold(
-        body: Center(
-          child: Text(
-            'User session found',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-        ),
-      );
+      return const HomePage();
     }
 
     return const LoginScreen();

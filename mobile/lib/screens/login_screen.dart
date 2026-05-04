@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'register_screen.dart';
+import 'home_screen.dart';
 import '../services/token_storage.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -75,6 +76,14 @@ class _LoginScreenState extends State<LoginScreen> {
         final accessToken = data["accessToken"];
         final refreshToken = data["refreshToken"];
 
+        if (accessToken == null ||
+            refreshToken == null ||
+            accessToken.toString().isEmpty ||
+            refreshToken.toString().isEmpty) {
+          showErrorBanner("Sunucudan geçerli token alınamadı.");
+          return;
+        }
+
         await TokenStorage.saveTokens(
           accessToken: accessToken,
           refreshToken: refreshToken,
@@ -83,12 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
         showSuccessBanner("Giriş başarılı");
 
         Future.delayed(const Duration(milliseconds: 700), () {
-          if (mounted) {
-            // Navigator.pushReplacement(
-            //   context,
-            //   MaterialPageRoute(builder: (context) => HomeScreen()),
-            // );
-          }
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomePage()),
+          );
         });
 
         return;
@@ -248,9 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     return null;
                                   },
                                 ),
-
                                 const SizedBox(height: 18),
-
                                 const Text(
                                   "Password",
                                   style: TextStyle(
@@ -285,9 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     return null;
                                   },
                                 ),
-
                                 const SizedBox(height: 24),
-
                                 SizedBox(
                                   height: 52,
                                   child: OutlinedButton(
@@ -321,9 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                   ),
                                 ),
-
                                 const SizedBox(height: 12),
-
                                 TextButton(
                                   onPressed: () {
                                     Navigator.push(

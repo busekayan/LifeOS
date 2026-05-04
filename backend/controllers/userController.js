@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { sql, poolPromise } = require("../config/db");
 const bcrypt = require("bcrypt");
+const { get } = require("../routes/userRoutes");
 
 const registerUser = async (req, res) => {
   let { firstName, lastName, email, password } = req.body;
@@ -179,6 +180,51 @@ const loginUser = async (req, res) => {
     });
   }
 };
+const getMe = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const pool = await poolPromise;
+
+    if (!pool) {
+      return res.status(500).json({
+        message: "Veritabanı bağlantısı kurulamadı",
+      });
+    }
+
+    const userResult = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        SELECT id, first_name, last_name, email
+        FROM users
+        WHERE id = @userId
+      `);
+
+    if (userResult.recordset.length === 0) {
+      return res.status(404).json({
+        message: "Kullanıcı bulunamadı",
+      });
+    }
+
+    const user = userResult.recordset[0];
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error("GET ME ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server hatası",
+    });
+  }
+};
 const refreshTokenUser = async (req, res) => {
   const { refreshToken } = req.body;
 
@@ -231,15 +277,33 @@ const refreshTokenUser = async (req, res) => {
       });
     }
 
+    const userResult = await pool
+      .request()
+      .input("userId", sql.Int, decoded.userId)
+      .query(`
+        SELECT id, email
+        FROM users
+        WHERE id = @userId
+      `);
+
+    if (userResult.recordset.length === 0) {
+      return res.status(404).json({
+        message: "Kullanıcı bulunamadı",
+      });
+    }
+
+    const user = userResult.recordset[0];
+
     const newAccessToken = jwt.sign(
-      {
-        userId: decoded.userId,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "30m",
-      }
-    );
+    {
+      userId: user.id,
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "30m",
+    }
+      );
 
     return res.status(200).json({
       message: "Yeni access token oluşturuldu",
@@ -291,4 +355,4 @@ const logoutUser = async (req, res) => {
     });
   }
 };
-module.exports = { registerUser, loginUser, refreshTokenUser, logoutUser };
+module.exports = { registerUser, loginUser, refreshTokenUser, logoutUser, getMe };
