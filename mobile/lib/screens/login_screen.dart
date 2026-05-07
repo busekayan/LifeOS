@@ -59,10 +59,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/users/login"),
+        Uri.parse("http://localhost:3000/users/login"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": email, "password": password}),
-      );
+      )
+      .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
 

@@ -122,7 +122,7 @@ class _HomePageState extends State<HomePage> {
 
       final response = await http.get(
         Uri.parse(
-          "http://10.0.2.2:3000/habits?date=${formatDateForApi(selectedDate)}",
+          "http://localhost:3000/habits?date=${formatDateForApi(selectedDate)}",
         ),
         headers: {
           "Content-Type": "application/json",
@@ -177,7 +177,7 @@ class _HomePageState extends State<HomePage> {
       }
 
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/habit-logs/toggle"),
+        Uri.parse("http://localhost:3000/habit-logs/toggle"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $accessToken",
@@ -389,7 +389,7 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 scrollDirection: Axis.horizontal,
                 itemCount: monthDates.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   final date = monthDates[index];
                   final isSelected =
@@ -550,7 +550,7 @@ class _HomePageState extends State<HomePage> {
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                       itemCount: filteredHabits.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 14),
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
                       itemBuilder: (context, index) {
                         final habit = filteredHabits[index];
 

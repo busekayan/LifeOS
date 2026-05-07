@@ -54,6 +54,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> registerUser() async {
+    print("REGISTER FUNCTION STARTED");
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -68,8 +69,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
+      print("TRY STARTED");
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/users/register"),
+        Uri.parse("http://127.0.0.1:3000/users/register"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "firstName": name,
@@ -77,7 +79,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           "email": email,
           "password": password,
         }),
-      );
+      )
+      .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
 
@@ -101,7 +104,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      if (response.statusCode == 409 || response.statusCode == 409) {
+      if (response.statusCode == 400 || response.statusCode == 409) {
         try {
           final data = jsonDecode(response.body);
           final message = data["message"] ?? "Kayıt başarısız.";
@@ -113,15 +116,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       showErrorBanner("Kayıt başarısız. Lütfen tekrar deneyin.");
-    } catch (e) {
-      if (!mounted) return;
+      } catch (e) {
+        if (!mounted) return;
 
-      setState(() {
-        isLoading = false;
-      });
+        setState(() {
+         isLoading = false;
+        });
 
-      showErrorBanner("Bir hata oluştu. Sunucu bağlantısını kontrol edin.");
-    }
+        print("REGISTER ERROR: $e");
+
+        showErrorBanner("Bağlantı hatası: $e");
+      }
   }
 
   InputDecoration customInputDecoration(String hintText) {

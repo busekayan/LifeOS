@@ -1,6 +1,8 @@
-const { poolPromise, sql } = require("../config/db");
+const pool = require("../config/db");
 
 const createHabit = async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const userId = req.user.userId;
     const { name, description, period, frequency_type, days } = req.body;
@@ -42,52 +44,56 @@ const createHabit = async (req, res) => {
       });
     }
 
-    const pool = await poolPromise;
+    await client.query("BEGIN");
 
-    const habitResult = await pool
-      .request()
-      .input("userId", sql.Int, userId)
-      .input("name", sql.NVarChar(255), name)
-      .input("description", sql.NVarChar(500), description || null)
-      .input("period", sql.NVarChar(20), period)
-      .input("frequencyType", sql.NVarChar(50), frequency_type)
-      .query(`
-        INSERT INTO habits (user_id, name, description, frequency_type, period)
-        OUTPUT INSERTED.id
-        VALUES (@userId, @name, @description, @frequencyType, @period)
-      `);
+    const habitResult = await client.query(
+      `
+      INSERT INTO habits 
+        (user_id, name, description, frequency_type, period)
+      VALUES 
+        ($1, $2, $3, $4, $5)
+      RETURNING id
+      `,
+      [userId, name, description || null, frequency_type, period]
+    );
 
-    const habitId = habitResult.recordset[0].id;
+    const habitId = habitResult.rows[0].id;
 
     for (const day of days) {
-      await pool
-        .request()
-        .input("habitId", sql.Int, habitId)
-        .input("dayOfWeek", sql.Int, day)
-        .query(`
-          INSERT INTO habit_days (habit_id, day_of_week)
-          VALUES (@habitId, @dayOfWeek)
-        `);
+      await client.query(
+        `
+        INSERT INTO habit_days 
+          (habit_id, day_of_week)
+        VALUES 
+          ($1, $2)
+        `,
+        [habitId, day]
+      );
     }
+
+    await client.query("COMMIT");
 
     return res.status(201).json({
       message: "Habit created successfully",
       habitId,
     });
   } catch (err) {
+    await client.query("ROLLBACK");
+
     console.error("CREATE HABIT ERROR:", err);
+
     return res.status(500).json({
       message: "Server error",
     });
+  } finally {
+    client.release();
   }
 };
 
 const getHabits = async (req, res) => {
-  console.log("GET /habits çalıştı");
-
   try {
     const userId = req.user.userId;
-    const { date } = req.query; // örnek: 2026-04-23
+    const { date } = req.query;
 
     if (!date) {
       return res.status(400).json({
@@ -95,42 +101,35 @@ const getHabits = async (req, res) => {
       });
     }
 
-    const pool = await poolPromise;
-    console.log("DB query başlamadan önce");
-
-    const result = await pool
-      .request()
-      .input("userId", sql.Int, userId)
-      .input("selectedDate", sql.Date, date)
-      .query(`
-        SELECT
-          h.id,
-          h.name,
-          h.description,
-          h.period,
-          h.frequency_type,
-         hd.day_of_week,
-          CASE
-           WHEN hl.id IS NOT NULL THEN CAST(1 AS BIT)
-           ELSE CAST(0 AS BIT)
-           END AS is_completed
-         FROM habits h
-        LEFT JOIN habit_days hd 
-          ON h.id = hd.habit_id
-        LEFT JOIN habit_logs hl
-         ON h.id = hl.habit_id
-         AND hl.user_id = @userId
-         AND hl.log_date = @selectedDate
-       WHERE h.user_id = @userId
-        ORDER BY h.id DESC, hd.day_of_week ASC
-       `);
-
-    console.log("DB query bitti");
-    console.log(result.recordset);
+    const result = await pool.query(
+      `
+      SELECT
+        h.id,
+        h.name,
+        h.description,
+        h.period,
+        h.frequency_type,
+        hd.day_of_week,
+        CASE
+          WHEN hl.id IS NOT NULL THEN true
+          ELSE false
+        END AS is_completed
+      FROM habits h
+      LEFT JOIN habit_days hd
+        ON h.id = hd.habit_id
+      LEFT JOIN habit_logs hl
+        ON h.id = hl.habit_id
+        AND hl.user_id = $1
+        AND hl.log_date = $2
+      WHERE h.user_id = $1
+      ORDER BY h.id DESC, hd.day_of_week ASC
+      `,
+      [userId, date]
+    );
 
     const groupedHabits = [];
 
-    for (const row of result.recordset) {
+    for (const row of result.rows) {
       let habit = groupedHabits.find((item) => item.id === row.id);
 
       if (!habit) {
@@ -141,8 +140,9 @@ const getHabits = async (req, res) => {
           period: row.period,
           frequency_type: row.frequency_type,
           days: [],
-          is_completed: row.is_completed === true || row.is_completed === 1,
+          is_completed: row.is_completed,
         };
+
         groupedHabits.push(habit);
       }
 
@@ -156,6 +156,7 @@ const getHabits = async (req, res) => {
     });
   } catch (err) {
     console.error("GET HABITS ERROR:", err);
+
     return res.status(500).json({
       message: "Server error",
     });

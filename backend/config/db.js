@@ -1,27 +1,20 @@
-const sql = require("mssql/msnodesqlv8");
+const { Pool } = require("pg");
+require("dotenv").config();
 
-const config = {
-  server: "BUSE\\SQLEXPRESS",
-  database: "LifeOS",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true,
-    trustServerCertificate: true,
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
   },
-};
+});
 
-const poolPromise = new sql.ConnectionPool(config)
-  .connect()
-  .then((pool) => {
-    console.log("Connected to MSSQL with Windows Authentication");
-    return pool;
-  })
-  .catch((err) => {
+async function connectDB() {
+  try {
+    await pool.query("SELECT NOW()");
+    console.log("Connected to PostgreSQL");
+  } catch (err) {
     console.error("DB connection error:", err);
-    return null;
-  });
+  }
+}
 
-module.exports = {
-  sql,
-  poolPromise,
-};
+module.exports = pool;

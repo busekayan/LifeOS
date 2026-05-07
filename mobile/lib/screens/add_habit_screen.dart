@@ -113,7 +113,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       print("ADD HABIT BODY: ${jsonEncode(body)}");
 
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/habits"),
+        Uri.parse("http://localhost:3000/habits"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $accessToken",

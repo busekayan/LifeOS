@@ -1,4 +1,4 @@
-const { poolPromise, sql } = require("../config/db");
+const pool = require("../config/db");
 
 const toggleHabitLog = async (req, res) => {
   try {
@@ -11,33 +11,27 @@ const toggleHabitLog = async (req, res) => {
       });
     }
 
-    const pool = await poolPromise;
+    const existingLog = await pool.query(
+      `
+      SELECT id
+      FROM habit_logs
+      WHERE habit_id = $1
+        AND user_id = $2
+        AND log_date = $3
+      `,
+      [habit_id, userId, log_date]
+    );
 
-    const existingLog = await pool
-      .request()
-      .input("habitId", sql.Int, habit_id)
-      .input("userId", sql.Int, userId)
-      .input("logDate", sql.Date, log_date)
-      .query(`
-        SELECT id
-        FROM habit_logs
-        WHERE habit_id = @habitId
-          AND user_id = @userId
-          AND log_date = @logDate
-      `);
-
-    if (existingLog.recordset.length > 0) {
-      await pool
-        .request()
-        .input("habitId", sql.Int, habit_id)
-        .input("userId", sql.Int, userId)
-        .input("logDate", sql.Date, log_date)
-        .query(`
-          DELETE FROM habit_logs
-          WHERE habit_id = @habitId
-            AND user_id = @userId
-            AND log_date = @logDate
-        `);
+    if (existingLog.rows.length > 0) {
+      await pool.query(
+        `
+        DELETE FROM habit_logs
+        WHERE habit_id = $1
+          AND user_id = $2
+          AND log_date = $3
+        `,
+        [habit_id, userId, log_date]
+      );
 
       return res.status(200).json({
         completed: false,
@@ -45,16 +39,15 @@ const toggleHabitLog = async (req, res) => {
       });
     }
 
-    await pool
-      .request()
-      .input("habitId", sql.Int, habit_id)
-      .input("userId", sql.Int, userId)
-      .input("logDate", sql.Date, log_date)
-      .input("value", sql.Int, 1)
-      .query(`
-        INSERT INTO habit_logs (habit_id, user_id, log_date, value)
-        VALUES (@habitId, @userId, @logDate, @value)
-      `);
+    await pool.query(
+      `
+      INSERT INTO habit_logs 
+        (habit_id, user_id, log_date, value)
+      VALUES 
+        ($1, $2, $3, $4)
+      `,
+      [habit_id, userId, log_date, 1]
+    );
 
     return res.status(201).json({
       completed: true,
@@ -62,6 +55,7 @@ const toggleHabitLog = async (req, res) => {
     });
   } catch (err) {
     console.error("TOGGLE HABIT LOG ERROR:", err);
+
     return res.status(500).json({
       message: "Server error",
     });
