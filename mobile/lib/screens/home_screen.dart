@@ -331,8 +331,28 @@ String formatCalendarLabel(DateTime date) {
   ];
 
   return "${date.day} ${months[date.month - 1]}";
+ }
+Color getHabitAccentColor(HabitItem habit) {
+  switch (habit.period) {
+    case HabitFilter.morning:
+      return const Color(0xFF8DB4FF);
+    case HabitFilter.evening:
+      return const Color(0xFFA78BFA);
+    case HabitFilter.all:
+      return const Color(0xFFFFB86B);
+  }
 }
 
+IconData getHabitIcon(HabitItem habit) {
+  switch (habit.period) {
+    case HabitFilter.morning:
+      return Icons.wb_sunny_rounded;
+    case HabitFilter.evening:
+      return Icons.nightlight_round;
+    case HabitFilter.all:
+      return Icons.auto_awesome_rounded;
+  }
+}
   @override
   Widget build(BuildContext context) {
     final backgroundColor = getBackgroundColor();
@@ -624,81 +644,126 @@ SizedBox(
                       itemBuilder: (context, index) {
                         final habit = filteredHabits[index];
 
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selectedFilter == HabitFilter.evening
-                                ? const Color(0xFF2B3445)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.black.withOpacity(0.06),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Checkbox(
-                                value: habit.isCompleted,
-                                onChanged: (_) async {
-                                  await toggleHabit(habit);
-                                },
-                                shape: const CircleBorder(),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      habit.title,
-                                      style: TextStyle(
-                                        color: primaryTextColor,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: habit.isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
-                                      ),
-                                    ),
-                                    if (habit.description != null &&
-                                        habit.description!
-                                            .trim()
-                                            .isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        habit.description!,
-                                        style: TextStyle(
-                                          color: primaryTextColor.withOpacity(
-                                            0.7,
-                                          ),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                habit.isCompleted
-                                    ? Icons.check_circle
-                                    : Icons.radio_button_unchecked,
-                                color: habit.isCompleted
-                                    ? Colors.green
-                                    : Colors.grey,
-                              ),
-                            ],
-                          ),
-                        );
+                        final Color accentColor = getHabitAccentColor(habit);
+
+return AnimatedContainer(
+  duration: const Duration(milliseconds: 220),
+  curve: Curves.easeOutCubic,
+  padding: const EdgeInsets.all(16),
+  decoration: BoxDecoration(
+    color: selectedFilter == HabitFilter.evening
+        ? const Color(0xFF2B3445)
+        : const Color(0xFFFFFCFA),
+    borderRadius: BorderRadius.circular(26),
+    border: Border.all(
+      color: habit.isCompleted
+          ? accentColor.withOpacity(0.55)
+          : Colors.black.withOpacity(0.05),
+      width: habit.isCompleted ? 1.4 : 1,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: habit.isCompleted
+            ? accentColor.withOpacity(0.20)
+            : Colors.black.withOpacity(0.05),
+        blurRadius: habit.isCompleted ? 16 : 10,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  ),
+  child: Row(
+    children: [
+      Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: accentColor.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Icon(
+          getHabitIcon(habit),
+          color: accentColor,
+          size: 26,
+        ),
+      ),
+
+      const SizedBox(width: 14),
+
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              habit.title,
+              style: TextStyle(
+                color: primaryTextColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                decoration: habit.isCompleted
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+              ),
+            ),
+
+            if (habit.description != null &&
+                habit.description!.trim().isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                habit.description!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: primaryTextColor.withOpacity(0.55),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 8),
+
+            Text(
+              habit.isCompleted ? "Tamamlandı" : "Bugün için bekliyor",
+              style: TextStyle(
+                color: habit.isCompleted
+                    ? accentColor
+                    : primaryTextColor.withOpacity(0.45),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+
+      GestureDetector(
+        onTap: () async {
+          await toggleHabit(habit);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: habit.isCompleted
+                ? accentColor
+                : accentColor.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            habit.isCompleted
+                ? Icons.check_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: habit.isCompleted
+                ? Colors.white
+                : accentColor.withOpacity(0.85),
+            size: 24,
+          ),
+        ),
+      ),
+    ],
+  ),
+);
                       },
                     ),
             ),
