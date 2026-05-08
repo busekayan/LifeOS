@@ -64,6 +64,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   DateTime selectedDate = DateTime.now();
+  late final PageController calendarController;
+  static const int calendarInitialPage = 10000;
   HabitFilter selectedFilter = HabitFilter.all;
   int selectedBottomNavIndex = 0;
 
@@ -100,8 +102,19 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+
+    calendarController = PageController(
+      initialPage: calendarInitialPage,
+      viewportFraction: 0.22,
+
+    );
     fetchHabits();
   }
+  @override
+  void dispose() {
+    calendarController.dispose();
+    super.dispose();
+}
 
   Future<void> fetchHabits() async {
     try {
@@ -217,7 +230,7 @@ class _HomePageState extends State<HomePage> {
     } else if (selectedFilter == HabitFilter.evening) {
       return const Color(0xFF1F2633);
     } else {
-      return const Color(0xFFF7F7F7);
+      return const Color(0xFFF6F2FF);
     }
   }
 
@@ -235,16 +248,16 @@ class _HomePageState extends State<HomePage> {
     return Colors.white;
   }
 
-  List<DateTime> getMonthDates(DateTime date) {
-    final firstDayOfMonth = DateTime(date.year, date.month, 1);
-    final lastDayOfMonth = DateTime(date.year, date.month + 1, 0);
-    final totalDays = lastDayOfMonth.day;
+  // List<DateTime> getMonthDates(DateTime date) {
+  //   final firstDayOfMonth = DateTime(date.year, date.month, 1);
+  //   final lastDayOfMonth = DateTime(date.year, date.month + 1, 0);
+  //   final totalDays = lastDayOfMonth.day;
 
-    return List.generate(
-      totalDays,
-      (index) => DateTime(date.year, date.month, index + 1),
-    );
-  }
+  //   return List.generate(
+  //     totalDays,
+  //     (index) => DateTime(date.year, date.month, index + 1),
+  //   );
+  // }
 
   String getFilterTitle() {
     switch (selectedFilter) {
@@ -274,14 +287,57 @@ class _HomePageState extends State<HomePage> {
     ];
 
     return "${months[date.month - 1]} ${date.year}";
+    
   }
+  DateTime normalizeDate(DateTime date) {
+  return DateTime(date.year, date.month, date.day);
+}
+
+bool isSameDate(DateTime first, DateTime second) {
+  return first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
+}
+
+DateTime getDateFromPageIndex(int index) {
+  final today = normalizeDate(DateTime.now());
+  final difference = index - calendarInitialPage;
+
+  return today.add(Duration(days: difference));
+}
+
+String formatCalendarLabel(DateTime date) {
+  final today = normalizeDate(DateTime.now());
+  final targetDate = normalizeDate(date);
+  final difference = targetDate.difference(today).inDays;
+
+  if (difference == 0) return "Bugün";
+  if (difference == -1) return "Dün";
+  if (difference == 1) return "Yarın";
+
+  const months = [
+    "Ocak",
+    "Şubat",
+    "Mart",
+    "Nisan",
+    "Mayıs",
+    "Haziran",
+    "Temmuz",
+    "Ağustos",
+    "Eylül",
+    "Ekim",
+    "Kasım",
+    "Aralık",
+  ];
+
+  return "${date.day} ${months[date.month - 1]}";
+}
 
   @override
   Widget build(BuildContext context) {
     final backgroundColor = getBackgroundColor();
     final primaryTextColor = getPrimaryTextColor();
     final infoCardColor = getInfoCardColor();
-    final monthDates = getMonthDates(selectedDate);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -365,99 +421,113 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Home",
-                    style: TextStyle(
+                   formatCalendarLabel(selectedDate),
+                   style: TextStyle(
                       color: primaryTextColor,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                   ),
+                    
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    formatMonthYear(selectedDate),
-                    style: TextStyle(
-                      color: primaryTextColor.withOpacity(0.75),
-                      fontSize: 15,
-                    ),
-                  ),
+                  
                 ],
               ),
             ),
-            SizedBox(
-              height: 90,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                scrollDirection: Axis.horizontal,
-                itemCount: monthDates.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final date = monthDates[index];
-                  final isSelected =
-                      date.day == selectedDate.day &&
-                      date.month == selectedDate.month &&
-                      date.year == selectedDate.year;
+SizedBox(
+  height: 118,
+  child: PageView.builder(
+    controller: calendarController,
+    itemCount: calendarInitialPage * 2,
+    onPageChanged: (index) async {
+      final newDate = getDateFromPageIndex(index);
 
-                  return GestureDetector(
-                    onTap: () async {
-                      setState(() {
-                        selectedDate = date;
-                        isLoading = true;
-                      });
-                      await fetchHabits();
-                    },
-                    child: Container(
-                      width: 64,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.blue
-                            : (selectedFilter == HabitFilter.evening
-                                  ? const Color(0xFF2B3445)
-                                  : Colors.white),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.blue
-                              : Colors.grey.shade300,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            weekDayNames[date.weekday - 1],
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : primaryTextColor.withOpacity(0.7),
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "${date.day}",
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : primaryTextColor,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
+      setState(() {
+        selectedDate = newDate;
+        isLoading = true;
+      });
+
+      await fetchHabits();
+    },
+    itemBuilder: (context, index) {
+      final date = getDateFromPageIndex(index);
+      final today = normalizeDate(DateTime.now());
+
+      final bool isSelected = isSameDate(date, selectedDate);
+      final bool isToday = isSameDate(date, today);
+
+      final Color selectedColor = const Color(0xFF6C63FF);
+      final Color todayBorderColor = const Color(0xFFFFB86B);
+      final Color cardColor = selectedFilter == HabitFilter.evening
+          ? const Color(0xFF2B3445)
+          : const Color(0xFFFFFBF5);
+
+      return GestureDetector(
+        onTap: () async {
+          await calendarController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+          );
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          margin: EdgeInsets.symmetric(
+            horizontal: 5,
+            vertical: isSelected ? 4 : 8,
+          ),
+          decoration: BoxDecoration(
+            color: isSelected ? selectedColor : cardColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isSelected
+                  ? selectedColor
+                  : isToday
+                  ? todayBorderColor
+                  : Colors.black.withOpacity(0.06),
+              width: isToday && !isSelected ? 2 : 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: isSelected
+                    ? selectedColor.withOpacity(0.25)
+                    : Colors.black.withOpacity(0.05),
+                blurRadius: isSelected ? 14 : 8,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                weekDayNames[date.weekday - 1],
+                style: TextStyle(
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.85)
+                      : primaryTextColor.withOpacity(0.55),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "${date.day}",
+                style: TextStyle(
+                  color: isSelected ? Colors.white : primaryTextColor,
+                  fontSize: isSelected ? 24 : 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+        
+            ],
+          ),
+        ),
+      );
+    },
+  ),
+),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
