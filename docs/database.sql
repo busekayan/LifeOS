@@ -51,7 +51,12 @@ CREATE TABLE habit_logs (
     CONSTRAINT fk_logs_user
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
+
+    
 );
+ALTER TABLE habit_logs
+ADD CONSTRAINT uq_habit_logs_habit_user_date
+UNIQUE (habit_id, user_id, log_date);
 
 -- Refresh token table
 CREATE TABLE refresh_tokens (
@@ -66,3 +71,11 @@ CREATE TABLE refresh_tokens (
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
 );
+-- habits tablosuna goal_unit ekle
+ALTER TABLE habits
+ADD COLUMN goal_unit VARCHAR(20) DEFAULT NULL;
+
+-- goal_unit için check constraint (opsiyonel ama önerilen)
+ALTER TABLE habits
+ADD CONSTRAINT chk_goal_unit
+CHECK (goal_unit IN ('minute', 'hour', 'step', 'liter', 'count') OR goal_unit IS NULL);

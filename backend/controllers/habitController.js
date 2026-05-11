@@ -5,7 +5,15 @@ const createHabit = async (req, res) => {
 
   try {
     const userId = req.user.userId;
-    const { name, description, period, frequency_type, days } = req.body;
+    const {
+      name,
+      description,
+      period,
+      frequency_type,
+      days,
+      target_value,
+      goal_type,
+    } = req.body;
 
     if (
       !name ||
@@ -44,17 +52,49 @@ const createHabit = async (req, res) => {
       });
     }
 
+    const hasTarget = target_value !== undefined && target_value !== null;
+    const hasUnit = goal_type !== undefined && goal_type !== null;
+
+    if (hasTarget !== hasUnit) {
+      return res.status(400).json({
+        message: "target_value and goal_type must be provided together",
+      });
+    }
+
+    if (hasTarget) {
+      if (!Number.isInteger(target_value) || target_value <= 0) {
+        return res.status(400).json({
+          message: "target_value must be a positive integer",
+        });
+      }
+
+      const validUnits = ["minute", "hour", "step", "liter", "count"];
+      if (!validUnits.includes(goal_type)) {
+        return res.status(400).json({
+          message: "Invalid goal_type value",
+        });
+      }
+    }
+
     await client.query("BEGIN");
 
     const habitResult = await client.query(
       `
       INSERT INTO habits 
-        (user_id, name, description, frequency_type, period)
+        (user_id, name, description, frequency_type, period, target_value, goal_unit)
       VALUES 
-        ($1, $2, $3, $4, $5)
+        ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
       `,
-      [userId, name, description || null, frequency_type, period]
+      [
+        userId,
+        name,
+        description || null,
+        frequency_type,
+        period,
+        hasTarget ? target_value : null,
+        hasUnit ? goal_type : null,
+      ]
     );
 
     const habitId = habitResult.rows[0].id;
@@ -109,10 +149,20 @@ const getHabits = async (req, res) => {
         h.description,
         h.period,
         h.frequency_type,
+        h.target_value,
+        h.goal_unit,
         hd.day_of_week,
         CASE
-          WHEN hl.id IS NOT NULL THEN true
-          ELSE false
+          WHEN h.target_value IS NOT NULL THEN
+            COALESCE(hl.value, 0)
+          ELSE
+            CASE WHEN hl.id IS NOT NULL THEN 1 ELSE 0 END
+        END AS current_value,
+        CASE
+          WHEN h.target_value IS NOT NULL THEN
+            COALESCE(hl.value, 0) >= h.target_value
+          ELSE
+            hl.id IS NOT NULL
         END AS is_completed
       FROM habits h
       LEFT JOIN habit_days hd
@@ -139,8 +189,11 @@ const getHabits = async (req, res) => {
           description: row.description,
           period: row.period,
           frequency_type: row.frequency_type,
-          days: [],
+          target_value: row.target_value,
+          goal_type: row.goal_unit,
+          current_value: row.current_value,
           is_completed: row.is_completed,
+          days: [],
         };
 
         groupedHabits.push(habit);

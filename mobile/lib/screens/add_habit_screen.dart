@@ -7,6 +7,8 @@ import '../services/token_storage.dart';
 
 enum HabitTimePeriod { morning, all, evening }
 
+enum HabitGoalType { none, minute, hour, step, liter, count }
+
 class AddHabitScreen extends StatefulWidget {
   const AddHabitScreen({super.key});
 
@@ -19,8 +21,10 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController targetValueController = TextEditingController();
 
   HabitTimePeriod selectedPeriod = HabitTimePeriod.morning;
+  HabitGoalType selectedGoalType = HabitGoalType.none;
 
   final List<String> weekDays = const [
     "Pzt",
@@ -55,6 +59,23 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
         return "Gün içinde";
       case HabitTimePeriod.evening:
         return "Günü kapatırken";
+    }
+  }
+
+  String getGoalTypeText(HabitGoalType type) {
+    switch (type) {
+      case HabitGoalType.none:
+        return "Hedef yok";
+      case HabitGoalType.minute:
+        return "Dakika";
+      case HabitGoalType.hour:
+        return "Saat";
+      case HabitGoalType.step:
+        return "Adım";
+      case HabitGoalType.liter:
+        return "Litre";
+      case HabitGoalType.count:
+        return "Tekrar";
     }
   }
 
@@ -95,13 +116,20 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     final List<int> daysAsInt = selectedDays.map((day) => dayMap[day]!).toList()
       ..sort();
 
-    // BURASI KRITIK
+    final int? targetValue = selectedGoalType == HabitGoalType.none
+        ? null
+        : int.tryParse(targetValueController.text.trim());
+
     final Map<String, dynamic> body = {
       "name": nameController.text.trim(),
       "description": descriptionController.text.trim(),
-      "period": selectedPeriod.name, // morning / all / evening
+      "period": selectedPeriod.name,
       "frequency_type": "weekly",
       "days": daysAsInt,
+      "target_value": targetValue,
+      "goal_type": selectedGoalType == HabitGoalType.none
+          ? null
+          : selectedGoalType.name,
     };
 
     setState(() {
@@ -166,19 +194,20 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
   void dispose() {
     nameController.dispose();
     descriptionController.dispose();
+    targetValueController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
+      backgroundColor: const Color(0xFFF6F2FF),
       appBar: AppBar(
         title: const Text("Yeni Alışkanlık"),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: const Color(0xFFF4F7FB),
-        foregroundColor: Colors.black,
+        backgroundColor: const Color(0xFFF6F2FF),
+        foregroundColor: Colors.black87,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -192,6 +221,8 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                 buildGeneralInfoCard(),
                 const SizedBox(height: 16),
                 buildPeriodCard(),
+                const SizedBox(height: 16),
+                buildGoalCard(),
                 const SizedBox(height: 16),
                 buildDaysCard(),
                 const SizedBox(height: 24),
@@ -211,13 +242,13 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [Color(0xFF5B8DEF), Color(0xFF7AA7FF)],
+          colors: [Color(0xFF6C63FF), Color(0xFFFF8FA3)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.18),
+            color: const Color(0xFF6C63FF).withOpacity(0.18),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -236,7 +267,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
           ),
           SizedBox(height: 8),
           Text(
-            "Başlık, zaman dilimi ve tekrar günlerini seç. Kaydettikten sonra ana ekrandan takip edebileceksin.",
+            "Başlık, zaman dilimi, hedef ve tekrar günlerini seç. Kaydettikten sonra ana ekrandan takip edebileceksin.",
             style: TextStyle(color: Colors.white, fontSize: 14, height: 1.45),
           ),
         ],
@@ -313,13 +344,13 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFFEAF2FF)
-                    : const Color(0xFFF7F8FC),
+                    ? const Color(0xFFEDEBFF)
+                    : const Color(0xFFFFFCFA),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: isSelected
-                      ? const Color(0xFF5B8DEF)
-                      : Colors.grey.shade300,
+                      ? const Color(0xFF6C63FF)
+                      : Colors.black.withOpacity(0.08),
                   width: isSelected ? 1.4 : 1,
                 ),
               ),
@@ -330,13 +361,13 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                     height: 42,
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? const Color(0xFF5B8DEF)
+                          ? const Color(0xFF6C63FF)
                           : Colors.white,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: isSelected
-                            ? const Color(0xFF5B8DEF)
-                            : Colors.grey.shade300,
+                            ? const Color(0xFF6C63FF)
+                            : Colors.black.withOpacity(0.08),
                       ),
                     ),
                     child: Icon(
@@ -355,7 +386,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: isSelected
-                                ? const Color(0xFF2A5FCB)
+                                ? const Color(0xFF4D46CC)
                                 : Colors.black87,
                           ),
                         ),
@@ -374,13 +405,112 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                     isSelected
                         ? Icons.check_circle
                         : Icons.radio_button_unchecked,
-                    color: isSelected ? const Color(0xFF5B8DEF) : Colors.grey,
+                    color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
                   ),
                 ],
               ),
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget buildGoalCard() {
+    return buildSectionCard(
+      title: "Ölçülebilir Hedef",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "İstersen bu alışkanlık için dakika, adım, litre veya tekrar gibi basit bir hedef ekleyebilirsin.",
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.black.withOpacity(0.62),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: HabitGoalType.values.map((type) {
+              final bool isSelected = selectedGoalType == type;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    selectedGoalType = type;
+
+                    if (type == HabitGoalType.none) {
+                      targetValueController.clear();
+                    }
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF6C63FF)
+                        : const Color(0xFFFFFCFA),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF6C63FF)
+                          : Colors.black.withOpacity(0.08),
+                    ),
+                  ),
+                  child: Text(
+                    getGoalTypeText(type),
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (selectedGoalType != HabitGoalType.none) ...[
+            const SizedBox(height: 16),
+            const Text(
+              "Hedef Değeri",
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: targetValueController,
+              keyboardType: TextInputType.number,
+              decoration: customInputDecoration(
+                hintText: "Örn: 20, 8000, 2",
+              ),
+              validator: (value) {
+                if (selectedGoalType == HabitGoalType.none) {
+                  return null;
+                }
+
+                final text = value?.trim() ?? "";
+
+                if (text.isEmpty) {
+                  return "Hedef değeri zorunludur";
+                }
+
+                final number = int.tryParse(text);
+
+                if (number == null || number <= 0) {
+                  return "Geçerli bir sayı gir";
+                }
+
+                return null;
+              },
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -423,17 +553,19 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF5B8DEF) : Colors.white,
+                    color: isSelected
+                        ? const Color(0xFF6C63FF)
+                        : const Color(0xFFFFFCFA),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isSelected
-                          ? const Color(0xFF5B8DEF)
-                          : Colors.grey.shade300,
+                          ? const Color(0xFF6C63FF)
+                          : Colors.black.withOpacity(0.08),
                     ),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: Colors.blue.withOpacity(0.14),
+                              color: const Color(0xFF6C63FF).withOpacity(0.14),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -463,8 +595,8 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       child: ElevatedButton(
         onPressed: isLoading ? null : saveHabit,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF5B8DEF),
-          disabledBackgroundColor: const Color(0xFFB7C8F3),
+          backgroundColor: const Color(0xFF6C63FF),
+          disabledBackgroundColor: const Color(0xFFBDB7FF),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
@@ -496,11 +628,11 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFFCFA),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.045),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
@@ -528,7 +660,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
         fontWeight: FontWeight.w500,
       ),
       filled: true,
-      fillColor: const Color(0xFFF5F7FB),
+      fillColor: const Color(0xFFF7F4FF),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -536,11 +668,11 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+        borderSide: BorderSide(color: Colors.black.withOpacity(0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF5B8DEF), width: 1.4),
+        borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
