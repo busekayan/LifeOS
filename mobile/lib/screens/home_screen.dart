@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:mobile/screens/diary_screen.dart';
 
 import '../services/token_storage.dart';
 import 'add_habit_screen.dart';
@@ -58,7 +59,7 @@ class HabitItem {
       targetValue: json["target_value"] as int?,
       goalType: json["goal_type"] as String?,
       isCompleted: json["is_completed"] == true || json["is_completed"] == 1,
-      currentValue: json["current_value"] ?? 0 as int,
+      currentValue: json["current_value"] ?? 0,
     );
   }
 }
@@ -577,9 +578,35 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
         onTap: (index) {
           if (index == 5) {
             Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const LoginScreen()),
-            );
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, _, _) => const HomePage(),
+              transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+  ),
+);
+            return;
+          }
+          if(index == 3) {
+            Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+            pageBuilder: (_, _, _) => const DailyScreen(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+  ),
+);
+            return;
+          }
+          if(index == 4) { 
+            Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+            pageBuilder: (_, _, _) => const LoginScreen(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+  ),
+);
             return;
           }
 
@@ -587,11 +614,7 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
             selectedBottomNavIndex = index;
           });
 
-          if (index != 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Bu sayfa henüz eklenmedi.")),
-            );
-          }
+          
         },
         type: BottomNavigationBarType.fixed,
         items: const [

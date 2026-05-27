@@ -79,3 +79,52 @@ ADD COLUMN goal_unit VARCHAR(20) DEFAULT NULL;
 ALTER TABLE habits
 ADD CONSTRAINT chk_goal_unit
 CHECK (goal_unit IN ('minute', 'hour', 'step', 'liter', 'count') OR goal_unit IS NULL);
+
+CREATE TABLE mood_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    mood VARCHAR(20) NOT NULL,
+    log_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_mood_logs_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_mood_logs_user_date
+        UNIQUE (user_id, log_date),
+
+    CONSTRAINT chk_mood
+        CHECK (mood IN ('mutlu', 'sakin', 'enerjik', 'uzgun', 'stresli', 'yorgun'))
+);
+
+ALTER TABLE mood_logs
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ADD CONSTRAINT mood_logs_user_date_unique
+UNIQUE (user_id, log_date);
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER mood_logs_updated_at
+BEFORE UPDATE ON mood_logs
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE daily_questions (
+    id SERIAL PRIMARY KEY,
+    question TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE diaries (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE diaries
+ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
