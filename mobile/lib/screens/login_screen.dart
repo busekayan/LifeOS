@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+import '../navigation/no_transition_page_route.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
 import '../services/token_storage.dart';
@@ -58,12 +60,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse("http://localhost:3000/users/login"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"email": email, "password": password}),
-      )
-      .timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            ApiConfig.uri("/users/login"),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({"email": email, "password": password}),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
 
@@ -97,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomePage()),
+            NoTransitionPageRoute(builder: (context) => const HomePage()),
           );
         });
 
@@ -332,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(
+                                      NoTransitionPageRoute(
                                         builder: (context) =>
                                             const RegisterScreen(),
                                       ),

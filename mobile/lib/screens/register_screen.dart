@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -70,17 +71,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       print("TRY STARTED");
-      final response = await http.post(
-        Uri.parse("http://127.0.0.1:3000/users/register"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "firstName": name,
-          "lastName": surname,
-          "email": email,
-          "password": password,
-        }),
-      )
-      .timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            ApiConfig.uri("/users/register"),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "firstName": name,
+              "lastName": surname,
+              "email": email,
+              "password": password,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
 
@@ -116,17 +118,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       showErrorBanner("Kayıt başarısız. Lütfen tekrar deneyin.");
-      } catch (e) {
-        if (!mounted) return;
+    } catch (e) {
+      if (!mounted) return;
 
-        setState(() {
-         isLoading = false;
-        });
+      setState(() {
+        isLoading = false;
+      });
 
-        print("REGISTER ERROR: $e");
+      print("REGISTER ERROR: $e");
 
-        showErrorBanner("Bağlantı hatası: $e");
-      }
+      showErrorBanner("Bağlantı hatası: $e");
+    }
   }
 
   InputDecoration customInputDecoration(String hintText) {
@@ -686,7 +688,7 @@ class _TopBannerState extends State<_TopBanner>
 
 //     try {
 //       final response = await http.post(
-//         Uri.parse("http://10.0.2.2:3000/users/register"),
+//         ApiConfig.uri("/users/register"),
 //         headers: {"Content-Type": "application/json"},
 //         body: jsonEncode({
 //           "firstName": name,

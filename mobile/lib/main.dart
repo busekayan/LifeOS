@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'config/api_config.dart';
+import 'navigation/no_transition_page_route.dart';
+import 'screens/diary_screen.dart';
+import 'screens/discovery_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/token_storage.dart';
@@ -20,6 +24,24 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: const AuthCheckScreen(),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case "/home":
+            return NoTransitionPageRoute(
+              builder: (context) => const HomePage(),
+            );
+          case "/explore":
+            return NoTransitionPageRoute(
+              builder: (context) => const DiscoveryPage(),
+            );
+          case "/daily":
+            return NoTransitionPageRoute(
+              builder: (context) => const DailyScreen(),
+            );
+        }
+
+        return null;
+      },
     );
   }
 }
@@ -32,8 +54,6 @@ class AuthCheckScreen extends StatefulWidget {
 }
 
 class _AuthCheckScreenState extends State<AuthCheckScreen> {
-  static const String baseUrl = "http://10.0.2.2:3000";
-
   bool isLoading = true;
   bool isLoggedIn = false;
 
@@ -63,7 +83,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       try {
         final meResponse = await http
             .get(
-              Uri.parse("$baseUrl/users/me"),
+              ApiConfig.uri("/users/me"),
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer $accessToken",
@@ -91,7 +111,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
       try {
         final refreshResponse = await http
             .post(
-              Uri.parse("$baseUrl/users/refresh"),
+              ApiConfig.uri("/users/refresh"),
               headers: {"Content-Type": "application/json"},
               body: jsonEncode({"refreshToken": refreshToken}),
             )
@@ -133,7 +153,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
           // 3) Yeni access token ile kullanıcıyı tekrar doğrula.
           final meResponse = await http
               .get(
-                Uri.parse("$baseUrl/users/me"),
+                ApiConfig.uri("/users/me"),
                 headers: {
                   "Content-Type": "application/json",
                   "Authorization": "Bearer $newAccessToken",

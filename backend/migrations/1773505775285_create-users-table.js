@@ -6,12 +6,17 @@ exports.up = (pgm) => {
       notNull: true,
       unique: true,
     },
-    password_hash: {
-      type: "text",
+    first_name: {
+      type: "varchar(100)",
       notNull: true,
     },
-    full_name: {
+    last_name: {
+      type: "varchar(100)",
+      notNull: true,
+    },
+    password_hash: {
       type: "varchar(255)",
+      notNull: true,
     },
     created_at: {
       type: "timestamp",

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/api_config.dart';
 import '../services/token_storage.dart';
 
 enum HabitTimePeriod { morning, all, evening }
@@ -141,7 +142,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       print("ADD HABIT BODY: ${jsonEncode(body)}");
 
       final response = await http.post(
-        Uri.parse("http://localhost:3000/habits"),
+        ApiConfig.uri("/habits"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $accessToken",
@@ -486,9 +487,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
             TextFormField(
               controller: targetValueController,
               keyboardType: TextInputType.number,
-              decoration: customInputDecoration(
-                hintText: "Örn: 20, 8000, 2",
-              ),
+              decoration: customInputDecoration(hintText: "Örn: 20, 8000, 2"),
               validator: (value) {
                 if (selectedGoalType == HabitGoalType.none) {
                   return null;

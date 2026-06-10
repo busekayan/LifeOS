@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../services/token_storage.dart';
-import 'home_screen.dart';
+import '../widgets/app_bottom_navigation_bar.dart';
 
 class MoodOption {
   final String key;
@@ -22,16 +23,10 @@ class DailyQuestion {
   final int id;
   final String question;
 
-  DailyQuestion({
-    required this.id,
-    required this.question,
-  });
+  DailyQuestion({required this.id, required this.question});
 
   factory DailyQuestion.fromJson(Map<String, dynamic> json) {
-    return DailyQuestion(
-      id: json["id"],
-      question: json["question"],
-    );
+    return DailyQuestion(id: json["id"], question: json["question"]);
   }
 }
 
@@ -89,18 +84,13 @@ class _DailyScreenState extends State<DailyScreen> {
   Color currentColor = const Color(0xFFE8E0FF);
   double fillValue = 0;
 
-  int selectedBottomNavIndex = 3;
-
-  static const String baseUrl = "http://127.0.0.1:3000";
-
   final TextEditingController diaryController = TextEditingController();
 
   @override
   void dispose() {
-  diaryController.dispose();
-  super.dispose();
-}
-
+    diaryController.dispose();
+    super.dispose();
+  }
 
   String formatDateForApi(DateTime date) {
     return date.toIso8601String().split("T")[0];
@@ -119,25 +109,24 @@ class _DailyScreenState extends State<DailyScreen> {
     super.initState();
     loadData();
   }
-Future<void> loadData() async {
-  setState(() => isLoading = true);
 
-  await Future.wait([
-    fetchMood(),
-    fetchDailyQuestions(),
-  ]);
+  Future<void> loadData() async {
+    setState(() => isLoading = true);
 
-  if (mounted) {
-    setState(() => isLoading = false);
+    await Future.wait([fetchMood(), fetchDailyQuestions()]);
+
+    if (mounted) {
+      setState(() => isLoading = false);
+    }
   }
-}
+
   Future<void> fetchMood() async {
     try {
       final token = await TokenStorage.getAccessToken();
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse("$baseUrl/moods?date=${formatDateForApi(DateTime.now())}"),
+        ApiConfig.uri("/moods", {"date": formatDateForApi(DateTime.now())}),
         headers: {"Authorization": "Bearer $token"},
       );
 
@@ -159,51 +148,41 @@ Future<void> loadData() async {
         }
       }
     } catch (_) {}
-
-    
   }
 
   Future<void> fetchDailyQuestions() async {
-  try {
-    final token = await TokenStorage.getAccessToken();
+    try {
+      final token = await TokenStorage.getAccessToken();
 
-    if (token == null) return;
+      if (token == null) return;
 
-    final response = await http.get(
-      Uri.parse("$baseUrl/questions/daily-questions"),
-      headers: {
-        "Authorization": "Bearer $token",
-      },
-    );
+      final response = await http.get(
+        ApiConfig.uri("/questions/daily-questions"),
+        headers: {"Authorization": "Bearer $token"},
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-      final List list = data is List ? data : data["questions"] ?? [];
+        final List list = data is List ? data : data["questions"] ?? [];
 
-      setState(() {
-        dailyQuestions = list
-            .map((e) => DailyQuestion.fromJson(e))
-            .toList();
-      });
+        setState(() {
+          dailyQuestions = list.map((e) => DailyQuestion.fromJson(e)).toList();
+        });
+      }
+      print("STATUS: ${response.statusCode}");
+      print("BODY: ${response.body}");
+    } catch (e) {
+      print(e);
     }
-    print("STATUS: ${response.statusCode}");
-    print("BODY: ${response.body}");
-  } 
-  
-  catch (e) {
-    print(e);
   }
-
-  
-}
 
   Future<void> saveMood(String mood) async {
     try {
       final token = await TokenStorage.getAccessToken();
 
       await http.post(
-        Uri.parse("$baseUrl/moods"),
+        ApiConfig.uri("/moods"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
@@ -215,39 +194,42 @@ Future<void> loadData() async {
       );
     } catch (_) {}
   }
-Future<void> saveDiary() async {
-  try {
-    final token = await TokenStorage.getAccessToken();
-    if (token == null) return;
 
-    final response = await http.post(
-      Uri.parse("$baseUrl/diaries"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode({
-        "content": diaryController.text,
-        "date": formatDateForApi(DateTime.now()),
-      }),
+  Future<void> saveDiary() async {
+    try {
+      final token = await TokenStorage.getAccessToken();
+      if (token == null) return;
+
+      final response = await http.post(
+        ApiConfig.uri("/diaries"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "content": diaryController.text,
+          "date": formatDateForApi(DateTime.now()),
+        }),
+      );
+
+      print("DIARY SAVE: ${response.statusCode}");
+      print("BODY: ${response.body}");
+    } catch (e) {
+      print("DIARY ERROR: $e");
+    }
+  }
+
+  Future<void> fetchDiaries() async {
+    final token = await TokenStorage.getAccessToken();
+
+    final res = await http.get(
+      ApiConfig.uri("/diaries"),
+      headers: {"Authorization": "Bearer $token"},
     );
 
-    print("DIARY SAVE: ${response.statusCode}");
-    print("BODY: ${response.body}");
-  } catch (e) {
-    print("DIARY ERROR: $e");
+    print(res.body);
   }
-}
-Future<void> fetchDiaries() async {
-  final token = await TokenStorage.getAccessToken();
 
-  final res = await http.get(
-    Uri.parse("$baseUrl/diaries"),
-    headers: {"Authorization": "Bearer $token"},
-  );
-
-  print(res.body);
-}
   void selectMood(MoodOption option) {
     setState(() {
       selectedMood = option.key;
@@ -277,7 +259,9 @@ Future<void> fetchDiaries() async {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: option.color,
-              border: selected ? Border.all(color: Colors.white, width: 2) : null,
+              border: selected
+                  ? Border.all(color: Colors.white, width: 2)
+                  : null,
             ),
           ),
           const SizedBox(height: 6),
@@ -288,7 +272,7 @@ Future<void> fetchDiaries() async {
               fontWeight: FontWeight.w600,
               color: option.color,
             ),
-          )
+          ),
         ],
       ),
     );
@@ -323,86 +307,81 @@ Future<void> fetchDiaries() async {
                 selectedMoodOption?.icon ?? Icons.water_drop_rounded,
                 size: 30,
                 color: Colors.white,
-              )
+              ),
             ],
           ),
         );
       },
     );
-    
   }
+
   Widget buildDiaryCard() {
-  return Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(28),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(.06),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Günlük Not",
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-        ),
-
-        const SizedBox(height: 12),
-
-       TextField(
-  controller: diaryController,
-  maxLines: 8,
-  minLines: 6,
-  keyboardType: TextInputType.multiline,
-  decoration: InputDecoration(
-    hintText: "Bugün neler oldu? Nasıl hissediyorsun?",
-    hintStyle: TextStyle(
-      color: Colors.grey.shade500,
-    ),
-    filled: true,
-    fillColor: const Color(0xFFF8F6FF),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(18),
-      borderSide: BorderSide.none,
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(18),
-      borderSide: const BorderSide(
-        color: Color(0xFF6C63FF),
-        width: 1.5,
+        ],
       ),
-    ),
-  ),
-),
-const SizedBox(height: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Günlük Not",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
 
-SizedBox(
-  width: double.infinity,
-  child: ElevatedButton(
-    onPressed: saveDiary,
-    style: ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF6C63FF),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: diaryController,
+            maxLines: 8,
+            minLines: 6,
+            keyboardType: TextInputType.multiline,
+            decoration: InputDecoration(
+              hintText: "Bugün neler oldu? Nasıl hissediyorsun?",
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              filled: true,
+              fillColor: const Color(0xFFF8F6FF),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(
+                  color: Color(0xFF6C63FF),
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: saveDiary,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text("Kaydet"),
+            ),
+          ),
+        ],
       ),
-    ),
-    child: const Text("Kaydet"),
-  ),
-),
-      ],
-    ),
-  );
-}
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -412,82 +391,7 @@ SizedBox(
     return Scaffold(
       backgroundColor: const Color(0xFFF6F2FF),
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedBottomNavIndex,
-        selectedItemColor: const Color(0xFF6C63FF),
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-            if (index == selectedBottomNavIndex) return;
-
-            setState(() => selectedBottomNavIndex = index);
-
-            switch (index) {
-            case 0:
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-             pageBuilder: (_, _, _) => const HomePage(),
-               transitionDuration: Duration.zero,
-              reverseTransitionDuration: Duration.zero,
-  ),
-);
-                break;
-
-              case 1:
-               Navigator.pushReplacementNamed(context, "/explore");
-              break;
-
-              case 2:
-                Navigator.pushReplacementNamed(context, "/tools");
-                break;
-
-              case 3:
-      // zaten DailyScreenr
-               break;
-
-              case 4:
-               Navigator.pushReplacementNamed(context, "/budget");
-               break;
-
-               case 5:
-               Navigator.pushReplacementNamed(context, "/profile");
-                break;
-  }
-},
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
-            label: "Keşfet",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            activeIcon: Icon(Icons.bar_chart),
-            label: "Araçlar",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: "Günlük",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: "Bütçe",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
+      bottomNavigationBar: const AppBottomNavigationBar(currentIndex: 3),
 
       body: SafeArea(
         child: isLoading
@@ -499,7 +403,10 @@ SizedBox(
                   children: [
                     const Text(
                       "Günlük",
-                      style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 28),
 
@@ -513,7 +420,10 @@ SizedBox(
                         children: [
                           const Text(
                             "Bugün nasıl hissediyorsun?",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           const SizedBox(height: 18),
 
@@ -521,13 +431,17 @@ SizedBox(
                             children: [
                               Expanded(
                                 child: Column(
-                                  children: left.map((e) => moodBubble(e)).toList(),
+                                  children: left
+                                      .map((e) => moodBubble(e))
+                                      .toList(),
                                 ),
                               ),
                               buildGlassBall(),
                               Expanded(
                                 child: Column(
-                                  children: right.map((e) => moodBubble(e)).toList(),
+                                  children: right
+                                      .map((e) => moodBubble(e))
+                                      .toList(),
                                 ),
                               ),
                             ],
@@ -542,7 +456,7 @@ SizedBox(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ]
+                          ],
                         ],
                       ),
                     ),
@@ -551,39 +465,39 @@ SizedBox(
                     buildDiaryCard(),
                     const SizedBox(height: 24),
 
-const Text(
-  "Bugünün Soruları",
-  style: TextStyle(
-    fontSize: 18,
-    fontWeight: FontWeight.w700,
-  ),
-),
+                    const Text(
+                      "Bugünün Soruları",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
 
-const SizedBox(height: 14),
+                    const SizedBox(height: 14),
 
-...dailyQuestions.map(
-  (q) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(.05),
-          blurRadius: 10,
-        ),
-      ],
-    ),
-    child: Text(
-      q.question,
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w500,
-      ),
-    ),
-  ),
-),
+                    ...dailyQuestions.map(
+                      (q) => Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(.05),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          q.question,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:mobile/screens/diary_screen.dart';
 
+import '../config/api_config.dart';
+import '../navigation/no_transition_page_route.dart';
 import '../services/token_storage.dart';
+import '../widgets/app_bottom_navigation_bar.dart';
 import 'add_habit_screen.dart';
-import 'login_screen.dart';
 
 enum HabitFilter { morning, all, evening }
 
@@ -77,7 +78,6 @@ class _HomePageState extends State<HomePage> {
   static const int calendarInitialPage = 10000;
 
   HabitFilter selectedFilter = HabitFilter.all;
-  int selectedBottomNavIndex = 0;
 
   List<HabitItem> allHabits = [];
   bool isLoading = true;
@@ -145,9 +145,7 @@ class _HomePageState extends State<HomePage> {
       }
 
       final response = await http.get(
-        Uri.parse(
-          "http://localhost:3000/habits?date=${formatDateForApi(selectedDate)}",
-        ),
+        ApiConfig.uri("/habits", {"date": formatDateForApi(selectedDate)}),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $accessToken",
@@ -189,225 +187,231 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-Future<void> handleHabitTap(HabitItem habit) async {
-  if (!hasGoal(habit)) {
-    await toggleHabit(habit);
-    return;
+  Future<void> handleHabitTap(HabitItem habit) async {
+    if (!hasGoal(habit)) {
+      await toggleHabit(habit);
+      return;
+    }
+    await showGoalProgressSheet(habit);
   }
-  await showGoalProgressSheet(habit);
-}
 
-Future<void> toggleHabit(HabitItem habit) async {
-  try {
-    final accessToken = await TokenStorage.getAccessToken();
+  Future<void> toggleHabit(HabitItem habit) async {
+    try {
+      final accessToken = await TokenStorage.getAccessToken();
 
-    if (accessToken == null || accessToken.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Oturum bulunamadı.")),
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await http.post(
+        ApiConfig.uri("/habit-logs/toggle"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+        body: jsonEncode({
+          "habit_id": habit.id,
+          "log_date": formatDateForApi(selectedDate),
+        }),
       );
-      return;
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          habit.isCompleted = data["completed"] == true;
+        });
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Alışkanlık durumu güncellenemedi.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
     }
-
-    final response = await http.post(
-      Uri.parse("http://localhost:3000/habit-logs/toggle"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $accessToken",
-      },
-      body: jsonEncode({
-        "habit_id": habit.id,
-        "log_date": formatDateForApi(selectedDate),
-      }),
-    );
-
-    if (!mounted) return;
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      setState(() {
-        habit.isCompleted = data["completed"] == true;
-      });
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Alışkanlık durumu güncellenemedi.")),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-    );
   }
-}
-Future<void> showGoalProgressSheet(HabitItem habit) async {
-  final TextEditingController controller = TextEditingController(
-    text: habit.currentValue > 0 ? habit.currentValue.toString() : "",
-  );
-  final String unit = getGoalUnitText(habit.goalType);
-  final Color accentColor = getHabitAccentColor(habit);
 
-  await showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          decoration: const BoxDecoration(
-            color: Color(0xFFFFFCFA),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+  Future<void> showGoalProgressSheet(HabitItem habit) async {
+    final TextEditingController controller = TextEditingController(
+      text: habit.currentValue > 0 ? habit.currentValue.toString() : "",
+    );
+    final String unit = getGoalUnitText(habit.goalType);
+    final Color accentColor = getHabitAccentColor(habit);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              Text(
-                habit.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Hedef: ${habit.targetValue} $unit",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.black.withOpacity(0.45),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Input
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: "Bugün ne kadar yaptın?",
-                  suffixText: unit,
-                  suffixStyle: TextStyle(
-                    color: accentColor,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  filled: true,
-                  fillColor: accentColor.withOpacity(0.08),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: accentColor, width: 1.5),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Kaydet butonu
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: accentColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFFCFA),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    elevation: 0,
                   ),
-                  onPressed: () async {
-                    final int? value = int.tryParse(controller.text.trim());
+                ),
+                const SizedBox(height: 20),
 
-                    if (value == null || value < 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Geçerli bir değer gir.")),
-                      );
-                      return;
-                    }
+                Text(
+                  habit.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Hedef: ${habit.targetValue} $unit",
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.black.withOpacity(0.45),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 20),
 
-                    Navigator.pop(context);
-                    await updateHabitValue(habit, value);
-                  },
-                  child: const Text(
-                    "Kaydet",
-                    style: TextStyle(
-                      fontSize: 16,
+                // Input
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: "Bugün ne kadar yaptın?",
+                    suffixText: unit,
+                    suffixStyle: TextStyle(
+                      color: accentColor,
                       fontWeight: FontWeight.w700,
                     ),
+                    filled: true,
+                    fillColor: accentColor.withOpacity(0.08),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: accentColor, width: 1.5),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+
+                // Kaydet butonu
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      final int? value = int.tryParse(controller.text.trim());
+
+                      if (value == null || value < 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Geçerli bir değer gir."),
+                          ),
+                        );
+                        return;
+                      }
+
+                      Navigator.pop(context);
+                      await updateHabitValue(habit, value);
+                    },
+                    child: const Text(
+                      "Kaydet",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
-}
-Future<void> updateHabitValue(HabitItem habit, int value) async {
-  try {
-    final accessToken = await TokenStorage.getAccessToken();
-
-    if (accessToken == null || accessToken.isEmpty) return;
-
-    final response = await http.patch(
-      Uri.parse("http://localhost:3000/habit-logs/value"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $accessToken",
+        );
       },
-      body: jsonEncode({
-        "habit_id": habit.id,
-        "log_date": formatDateForApi(selectedDate),
-        "value": value,
-      }),
-    );
-
-    if (!mounted) return;
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-
-      setState(() {
-        habit.currentValue = value;
-        habit.isCompleted = data["completed"] == true;
-      });
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("İlerleme güncellenemedi.")),
-    );
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
     );
   }
-}
+
+  Future<void> updateHabitValue(HabitItem habit, int value) async {
+    try {
+      final accessToken = await TokenStorage.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) return;
+
+      final response = await http.patch(
+        ApiConfig.uri("/habit-logs/value"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+        body: jsonEncode({
+          "habit_id": habit.id,
+          "log_date": formatDateForApi(selectedDate),
+          "value": value,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+
+        setState(() {
+          habit.currentValue = value;
+          habit.isCompleted = data["completed"] == true;
+        });
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("İlerleme güncellenemedi.")));
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
 
   Color getBackgroundColor() {
     if (selectedFilter == HabitFilter.evening) {
@@ -539,10 +543,8 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
       return habit.isCompleted ? "Tamamlandı" : "Bugün için bekliyor";
     }
 
-
     final String unit = getGoalUnitText(habit.goalType);
     return "${habit.currentValue} / ${habit.targetValue} $unit"; // currentValue kullan
-
   }
 
   @override
@@ -559,7 +561,7 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
         onPressed: () async {
           final result = await Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const AddHabitScreen()),
+            NoTransitionPageRoute(builder: (context) => const AddHabitScreen()),
           );
 
           if (result == true) {
@@ -571,85 +573,7 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
         },
         child: const Icon(Icons.add),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedBottomNavIndex,
-        selectedItemColor: const Color(0xFF6C63FF),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          if (index == 5) {
-            Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, _, _) => const HomePage(),
-              transitionDuration: Duration.zero,
-                reverseTransitionDuration: Duration.zero,
-  ),
-);
-            return;
-          }
-          if(index == 3) {
-            Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-            pageBuilder: (_, _, _) => const DailyScreen(),
-            transitionDuration: Duration.zero,
-            reverseTransitionDuration: Duration.zero,
-  ),
-);
-            return;
-          }
-          if(index == 4) { 
-            Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-            pageBuilder: (_, _, _) => const LoginScreen(),
-            transitionDuration: Duration.zero,
-            reverseTransitionDuration: Duration.zero,
-  ),
-);
-            return;
-          }
-
-          setState(() {
-            selectedBottomNavIndex = index;
-          });
-
-          
-        },
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
-            label: "Keşfet",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            activeIcon: Icon(Icons.bar_chart),
-            label: "Araçlar",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: "Günlük",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: "Bütçe",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
+      bottomNavigationBar: const AppBottomNavigationBar(currentIndex: 0),
       body: SafeArea(
         child: Column(
           children: [
@@ -975,9 +899,8 @@ Future<void> updateHabitValue(HabitItem habit, int value) async {
                                             style: TextStyle(
                                               color: habit.isCompleted
                                                   ? accentColor
-                                                  : primaryTextColor.withOpacity(
-                                                      0.45,
-                                                    ),
+                                                  : primaryTextColor
+                                                        .withOpacity(0.45),
                                               fontSize: 12,
                                               fontWeight: FontWeight.w700,
                                             ),
