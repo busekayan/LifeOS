@@ -6,12 +6,30 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../services/token_storage.dart';
 
+typedef HttpPost =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
+typedef GetAccessToken = Future<String?> Function();
+
 enum HabitTimePeriod { morning, all, evening }
 
 enum HabitGoalType { none, minute, hour, step, liter, count }
 
 class AddHabitScreen extends StatefulWidget {
-  const AddHabitScreen({super.key});
+  final HttpPost httpPost;
+  final GetAccessToken getAccessToken;
+  final bool popOnSuccess;
+
+  const AddHabitScreen({
+    super.key,
+    this.httpPost = http.post,
+    this.getAccessToken = TokenStorage.getAccessToken,
+    this.popOnSuccess = true,
+  });
 
   @override
   State<AddHabitScreen> createState() => _AddHabitScreenState();
@@ -92,7 +110,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       return;
     }
 
-    final accessToken = await TokenStorage.getAccessToken();
+    final accessToken = await widget.getAccessToken();
 
     if (accessToken == null || accessToken.isEmpty) {
       if (!mounted) return;
@@ -141,7 +159,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       print("ADD HABIT TOKEN: $accessToken");
       print("ADD HABIT BODY: ${jsonEncode(body)}");
 
-      final response = await http.post(
+      final response = await widget.httpPost(
         ApiConfig.uri("/habits"),
         headers: {
           "Content-Type": "application/json",
@@ -159,7 +177,9 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Alışkanlık başarıyla eklendi.")),
         );
-        Navigator.pop(context, true);
+        if (widget.popOnSuccess) {
+          Navigator.pop(context, true);
+        }
         return;
       }
 
