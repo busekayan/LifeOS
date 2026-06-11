@@ -3,8 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 
+typedef HttpPost =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  final HttpPost httpPost;
+  final bool navigateOnSuccess;
+
+  const RegisterScreen({
+    super.key,
+    this.httpPost = http.post,
+    this.navigateOnSuccess = true,
+  });
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -71,8 +85,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       print("TRY STARTED");
-      final response = await http
-          .post(
+      final response = await widget
+          .httpPost(
             ApiConfig.uri("/users/register"),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
@@ -92,6 +106,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         showSuccessBanner("Kayıt başarılı.");
+
+        if (!widget.navigateOnSuccess) {
+          return;
+        }
 
         Future.delayed(const Duration(milliseconds: 700), () {
           if (mounted) {

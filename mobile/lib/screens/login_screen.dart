@@ -7,8 +7,30 @@ import 'register_screen.dart';
 import 'home_screen.dart';
 import '../services/token_storage.dart';
 
+typedef HttpPost =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
+typedef SaveTokens =
+    Future<void> Function({
+      required String accessToken,
+      required String refreshToken,
+    });
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final HttpPost httpPost;
+  final SaveTokens saveTokens;
+  final bool navigateOnSuccess;
+
+  const LoginScreen({
+    super.key,
+    this.httpPost = http.post,
+    this.saveTokens = TokenStorage.saveTokens,
+    this.navigateOnSuccess = true,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -60,8 +82,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await http
-          .post(
+      final response = await widget
+          .httpPost(
             ApiConfig.uri("/users/login"),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"email": email, "password": password}),
@@ -88,12 +110,16 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        await TokenStorage.saveTokens(
+        await widget.saveTokens(
           accessToken: accessToken,
           refreshToken: refreshToken,
         );
 
         showSuccessBanner("Giriş başarılı");
+
+        if (!widget.navigateOnSuccess) {
+          return;
+        }
 
         Future.delayed(const Duration(milliseconds: 700), () {
           if (!mounted) return;
