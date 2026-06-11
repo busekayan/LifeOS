@@ -19,6 +19,7 @@ http.Response jsonResponse(Map<String, Object?> body, int statusCode) {
 Widget buildHomeScreen({
   HttpGet? httpGet,
   HttpPost? httpPost,
+  HttpDelete? httpDelete,
   GetAccessToken? getAccessToken,
 }) {
   return MaterialApp(
@@ -34,6 +35,11 @@ Widget buildHomeScreen({
           httpPost ??
           (Uri url, {Map<String, String>? headers, Object? body}) async {
             return jsonResponse({"completed": true}, 201);
+          },
+      httpDelete:
+          httpDelete ??
+          (Uri url, {Map<String, String>? headers}) async {
+            return jsonResponse({"message": "deleted"}, 200);
           },
     ),
   );
@@ -150,5 +156,68 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text("Alışkanlıklar alınamadı."), findsOneWidget);
+  });
+
+  testWidgets("deletes a habit after confirmation", (tester) async {
+    Uri? deleteUrl;
+
+    await tester.pumpWidget(
+      buildHomeScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({
+            "habits": [habitJson(id: 1, name: "Read 20 pages")],
+          }, 200);
+        },
+        httpDelete: (Uri url, {Map<String, String>? headers}) async {
+          deleteUrl = url;
+          return jsonResponse({"message": "deleted"}, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip("Alışkanlığı sil"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Alışkanlığı sil"), findsOneWidget);
+    expect(
+      find.text("'Read 20 pages' alışkanlığını silmek istediğine emin misin?"),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text("Sil"));
+    await tester.pumpAndSettle();
+
+    expect(deleteUrl.toString(), contains("/habits/1"));
+    expect(find.text("Read 20 pages"), findsNothing);
+    expect(find.text("Alışkanlık silindi."), findsOneWidget);
+    expect(
+      find.text("Bu gün ve filtre için henüz alışkanlık yok."),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets("keeps habit visible when delete request fails", (tester) async {
+    await tester.pumpWidget(
+      buildHomeScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({
+            "habits": [habitJson(id: 1, name: "Read 20 pages")],
+          }, 200);
+        },
+        httpDelete: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({"message": "error"}, 500);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip("Alışkanlığı sil"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Sil"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Read 20 pages"), findsOneWidget);
+    expect(find.text("Alışkanlık silinemedi."), findsOneWidget);
   });
 }

@@ -216,4 +216,78 @@ const getHabits = async (req, res) => {
   }
 };
 
-module.exports = { createHabit, getHabits };
+const deleteHabit = async (req, res) => {
+  const habitId = Number(req.params.id);
+
+  if (!Number.isInteger(habitId) || habitId <= 0) {
+    return res.status(400).json({
+      message: "Invalid habit id",
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    const userId = req.user.userId;
+
+    await client.query("BEGIN");
+
+    const habitResult = await client.query(
+      `
+      SELECT id
+      FROM habits
+      WHERE id = $1 AND user_id = $2
+      `,
+      [habitId, userId]
+    );
+
+    if (habitResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        message: "Habit not found",
+      });
+    }
+
+    await client.query(
+      `
+      DELETE FROM habit_logs
+      WHERE habit_id = $1 AND user_id = $2
+      `,
+      [habitId, userId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM habit_days
+      WHERE habit_id = $1
+      `,
+      [habitId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM habits
+      WHERE id = $1 AND user_id = $2
+      `,
+      [habitId, userId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      message: "Habit deleted successfully",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+
+    console.error("DELETE HABIT ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { createHabit, getHabits, deleteHabit };

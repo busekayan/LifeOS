@@ -25,6 +25,9 @@ typedef HttpPatch =
       Object? body,
     });
 
+typedef HttpDelete =
+    Future<http.Response> Function(Uri url, {Map<String, String>? headers});
+
 typedef GetAccessToken = Future<String?> Function();
 
 enum HabitFilter { morning, all, evening }
@@ -88,6 +91,7 @@ class HomePage extends StatefulWidget {
   final HttpGet httpGet;
   final HttpPost httpPost;
   final HttpPatch httpPatch;
+  final HttpDelete httpDelete;
   final GetAccessToken getAccessToken;
   final DateTime? initialDate;
 
@@ -96,6 +100,7 @@ class HomePage extends StatefulWidget {
     this.httpGet = http.get,
     this.httpPost = http.post,
     this.httpPatch = http.patch,
+    this.httpDelete = http.delete,
     this.getAccessToken = TokenStorage.getAccessToken,
     this.initialDate,
   });
@@ -437,6 +442,80 @@ class _HomePageState extends State<HomePage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("İlerleme güncellenemedi.")));
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
+
+  Future<void> confirmDeleteHabit(HabitItem habit) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Alışkanlığı sil"),
+          content: Text(
+            "'${habit.title}' alışkanlığını silmek istediğine emin misin?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Vazgeç"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Sil"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await deleteHabit(habit);
+    }
+  }
+
+  Future<void> deleteHabit(HabitItem habit) async {
+    try {
+      final accessToken = await widget.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await widget.httpDelete(
+        ApiConfig.uri("/habits/${habit.id}"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          allHabits.removeWhere((item) => item.id == habit.id);
+        });
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Alışkanlık silindi.")));
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Alışkanlık silinemedi.")));
     } catch (e) {
       if (!mounted) return;
 
@@ -968,6 +1047,17 @@ class _HomePageState extends State<HomePage> {
                                         : accentColor.withOpacity(0.85),
                                     size: 24,
                                   ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: "Alışkanlığı sil",
+                                onPressed: () async {
+                                  await confirmDeleteHabit(habit);
+                                },
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: primaryTextColor.withOpacity(0.45),
                                 ),
                               ),
                             ],

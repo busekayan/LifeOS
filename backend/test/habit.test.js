@@ -52,7 +52,11 @@ const mockPool = {
 
 require.cache[require.resolve("../config/db")] = { exports: mockPool };
 
-const { createHabit, getHabits } = require("../controllers/habitController");
+const {
+  createHabit,
+  getHabits,
+  deleteHabit,
+} = require("../controllers/habitController");
 const {
   toggleHabitLog,
   updateHabitLogValue,
@@ -76,10 +80,11 @@ const createResponse = () => {
   return res;
 };
 
-const authenticatedRequest = ({ body = {}, query = {} } = {}) => ({
+const authenticatedRequest = ({ body = {}, query = {}, params = {} } = {}) => ({
   user: { userId: 7 },
   body,
   query,
+  params,
 });
 
 describe("habit APIs", () => {
@@ -239,6 +244,60 @@ describe("habit APIs", () => {
 
     assert.equal(invalidTokenRes.statusCode, 401);
     assert.equal(invalidTokenRes.body.message, "Invalid or expired token");
+  });
+
+  it("deletes a habit and related records for the authenticated user", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [{ id: 42 }] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] }); // COMMIT
+
+    const req = authenticatedRequest({ params: { id: "42" } });
+    const res = createResponse();
+
+    await deleteHabit(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.message, "Habit deleted successfully");
+    assert.match(mockClient.queries[1].sql, /SELECT id\s+FROM habits/i);
+    assert.deepEqual(mockClient.queries[1].params, [42, 7]);
+    assert.match(mockClient.queries[2].sql, /DELETE FROM habit_logs/i);
+    assert.deepEqual(mockClient.queries[2].params, [42, 7]);
+    assert.match(mockClient.queries[3].sql, /DELETE FROM habit_days/i);
+    assert.deepEqual(mockClient.queries[3].params, [42]);
+    assert.match(mockClient.queries[4].sql, /DELETE FROM habits/i);
+    assert.deepEqual(mockClient.queries[4].params, [42, 7]);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("does not delete another user's habit", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] }); // ROLLBACK
+
+    const req = authenticatedRequest({ params: { id: "42" } });
+    const res = createResponse();
+
+    await deleteHabit(req, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.message, "Habit not found");
+    assert.equal(mockClient.queries.length, 3);
+    assert.match(mockClient.queries[2].sql, /ROLLBACK/i);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("rejects invalid habit id when deleting", async () => {
+    const req = authenticatedRequest({ params: { id: "abc" } });
+    const res = createResponse();
+
+    await deleteHabit(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "Invalid habit id");
+    assert.equal(mockPool.connectCalls, 0);
   });
 
   it("toggles a checkbox habit as completed", async () => {
