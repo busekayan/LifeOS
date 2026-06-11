@@ -24,12 +24,14 @@ class LoginScreen extends StatefulWidget {
   final HttpPost httpPost;
   final SaveTokens saveTokens;
   final bool navigateOnSuccess;
+  final WidgetBuilder homeBuilder;
 
   const LoginScreen({
     super.key,
     this.httpPost = http.post,
     this.saveTokens = TokenStorage.saveTokens,
     this.navigateOnSuccess = true,
+    this.homeBuilder = _defaultHomeBuilder,
   });
 
   @override
@@ -126,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
           Navigator.pushReplacement(
             context,
-            NoTransitionPageRoute(builder: (context) => const HomePage()),
+            NoTransitionPageRoute(builder: widget.homeBuilder),
           );
         });
 
@@ -392,6 +394,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
+Widget _defaultHomeBuilder(BuildContext context) => const HomePage();
 
 class _TopBanner extends StatefulWidget {
   final String message;
