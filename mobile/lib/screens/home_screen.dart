@@ -8,6 +8,25 @@ import '../services/token_storage.dart';
 import '../widgets/app_bottom_navigation_bar.dart';
 import 'add_habit_screen.dart';
 
+typedef HttpGet =
+    Future<http.Response> Function(Uri url, {Map<String, String>? headers});
+
+typedef HttpPost =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
+typedef HttpPatch =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
+typedef GetAccessToken = Future<String?> Function();
+
 enum HabitFilter { morning, all, evening }
 
 class HabitItem {
@@ -66,14 +85,27 @@ class HabitItem {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final HttpGet httpGet;
+  final HttpPost httpPost;
+  final HttpPatch httpPatch;
+  final GetAccessToken getAccessToken;
+  final DateTime? initialDate;
+
+  const HomePage({
+    super.key,
+    this.httpGet = http.get,
+    this.httpPost = http.post,
+    this.httpPatch = http.patch,
+    this.getAccessToken = TokenStorage.getAccessToken,
+    this.initialDate,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  DateTime selectedDate = DateTime.now();
+  late DateTime selectedDate;
   late final PageController calendarController;
   static const int calendarInitialPage = 10000;
 
@@ -95,6 +127,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    selectedDate = widget.initialDate ?? DateTime.now();
 
     calendarController = PageController(
       initialPage: calendarInitialPage,
@@ -129,7 +162,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> fetchHabits() async {
     try {
-      final accessToken = await TokenStorage.getAccessToken();
+      final accessToken = await widget.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
@@ -144,7 +177,7 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final response = await http.get(
+      final response = await widget.httpGet(
         ApiConfig.uri("/habits", {"date": formatDateForApi(selectedDate)}),
         headers: {
           "Content-Type": "application/json",
@@ -197,7 +230,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> toggleHabit(HabitItem habit) async {
     try {
-      final accessToken = await TokenStorage.getAccessToken();
+      final accessToken = await widget.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
@@ -208,7 +241,7 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final response = await http.post(
+      final response = await widget.httpPost(
         ApiConfig.uri("/habit-logs/toggle"),
         headers: {
           "Content-Type": "application/json",
@@ -372,11 +405,11 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> updateHabitValue(HabitItem habit, int value) async {
     try {
-      final accessToken = await TokenStorage.getAccessToken();
+      final accessToken = await widget.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) return;
 
-      final response = await http.patch(
+      final response = await widget.httpPatch(
         ApiConfig.uri("/habit-logs/value"),
         headers: {
           "Content-Type": "application/json",
