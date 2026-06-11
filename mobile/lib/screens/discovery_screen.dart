@@ -8,6 +8,18 @@ import '../config/api_config.dart';
 import '../services/token_storage.dart';
 import '../widgets/app_bottom_navigation_bar.dart';
 
+typedef HttpGet =
+    Future<http.Response> Function(Uri url, {Map<String, String>? headers});
+
+typedef HttpPost =
+    Future<http.Response> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      Object? body,
+    });
+
+typedef GetAccessToken = Future<String?> Function();
+
 enum HabitFilter { morning, all, evening }
 
 // ─────────────────────────────────────────────
@@ -107,7 +119,16 @@ IconData _categoryIconFor(String category) {
 // ─────────────────────────────────────────────
 
 class DiscoveryPage extends StatefulWidget {
-  const DiscoveryPage({super.key});
+  final HttpGet httpGet;
+  final HttpPost httpPost;
+  final GetAccessToken getAccessToken;
+
+  const DiscoveryPage({
+    super.key,
+    this.httpGet = http.get,
+    this.httpPost = http.post,
+    this.getAccessToken = TokenStorage.getAccessToken,
+  });
 
   @override
   State<DiscoveryPage> createState() => _DiscoveryPageState();
@@ -174,7 +195,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
     });
 
     try {
-      final accessToken = await TokenStorage.getAccessToken();
+      final accessToken = await widget.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
@@ -186,7 +207,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
         return;
       }
 
-      final response = await http.get(
+      final response = await widget.httpGet(
         ApiConfig.uri("/habit-templates"),
         headers: {
           "Content-Type": "application/json",
@@ -235,7 +256,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
     setState(() => _loadingTemplates.add(template.id));
 
     try {
-      final accessToken = await TokenStorage.getAccessToken();
+      final accessToken = await widget.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
@@ -245,7 +266,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
         return;
       }
 
-      final response = await http.post(
+      final response = await widget.httpPost(
         ApiConfig.uri("/habit-templates/${template.id}/add"),
         headers: {
           "Content-Type": "application/json",
