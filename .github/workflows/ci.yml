@@ -34,6 +34,9 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check:syntax
 
+      - name: Run backend tests
+        run: npm test
+
   mobile:
     name: Mobile checks
     runs-on: ubuntu-latest

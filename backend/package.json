@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test",
     "check:syntax": "find . -path ./node_modules -prune -o -name '*.js' -print -exec node --check {} \\;",
     "migrate": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
