@@ -40,6 +40,8 @@ class HabitItem {
   final List<int> days;
   final int? targetValue;
   final String? goalType;
+  final String? sourceTemplateId;
+  final String? sourceTemplateTitle;
   bool isCompleted;
   int currentValue;
 
@@ -51,6 +53,8 @@ class HabitItem {
     required this.days,
     this.targetValue,
     this.goalType,
+    this.sourceTemplateId,
+    this.sourceTemplateTitle,
     this.isCompleted = false,
     this.currentValue = 0,
   });
@@ -81,9 +85,15 @@ class HabitItem {
       days: parsedDays,
       targetValue: json["target_value"] as int?,
       goalType: json["goal_type"] as String?,
+      sourceTemplateId: json["source_template_id"]?.toString(),
+      sourceTemplateTitle: json["source_template_title"]?.toString(),
       isCompleted: json["is_completed"] == true || json["is_completed"] == 1,
       currentValue: json["current_value"] ?? 0,
     );
+  }
+
+  bool get isFromTemplate {
+    return sourceTemplateId != null && sourceTemplateId!.trim().isNotEmpty;
   }
 }
 
@@ -525,6 +535,91 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> confirmDeleteTemplateGroup({
+    required String templateId,
+    required String templateTitle,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Template planını sil"),
+          content: Text(
+            "'$templateTitle' planındaki tüm alışkanlıkları silmek istediğine emin misin?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Vazgeç"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Sil"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await deleteTemplateGroup(
+        templateId: templateId,
+        templateTitle: templateTitle,
+      );
+    }
+  }
+
+  Future<void> deleteTemplateGroup({
+    required String templateId,
+    required String templateTitle,
+  }) async {
+    try {
+      final accessToken = await widget.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await widget.httpDelete(
+        ApiConfig.uri("/habit-templates/$templateId"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          allHabits.removeWhere(
+            (habit) => habit.sourceTemplateId == templateId,
+          );
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Template planı silindi.")),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Template planı silinemedi.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
+
   Color getBackgroundColor() {
     if (selectedFilter == HabitFilter.evening) {
       return const Color(0xFF1F2633);
@@ -657,6 +752,257 @@ class _HomePageState extends State<HomePage> {
 
     final String unit = getGoalUnitText(habit.goalType);
     return "${habit.currentValue} / ${habit.targetValue} $unit"; // currentValue kullan
+  }
+
+  List<Widget> buildHabitList(Color primaryTextColor) {
+    final templateGroups = <String, List<HabitItem>>{};
+    final manualHabits = <HabitItem>[];
+
+    for (final habit in filteredHabits) {
+      if (habit.isFromTemplate) {
+        templateGroups
+            .putIfAbsent(habit.sourceTemplateId!, () => [])
+            .add(habit);
+      } else {
+        manualHabits.add(habit);
+      }
+    }
+
+    final widgets = <Widget>[];
+
+    for (final entry in templateGroups.entries) {
+      final templateId = entry.key;
+      final habits = entry.value;
+      final templateTitle =
+          habits.first.sourceTemplateTitle?.trim().isNotEmpty == true
+          ? habits.first.sourceTemplateTitle!
+          : "Template planı";
+
+      if (widgets.isNotEmpty) {
+        widgets.add(buildGroupDivider());
+      }
+
+      widgets.add(
+        buildTemplateGroupHeader(
+          templateId: templateId,
+          templateTitle: templateTitle,
+          primaryTextColor: primaryTextColor,
+        ),
+      );
+
+      for (final habit in habits) {
+        widgets.add(buildHabitCard(habit, primaryTextColor));
+        widgets.add(const SizedBox(height: 14));
+      }
+    }
+
+    if (manualHabits.isNotEmpty) {
+      if (widgets.isNotEmpty) {
+        widgets.add(buildGroupDivider());
+      }
+
+      for (final habit in manualHabits) {
+        widgets.add(buildHabitCard(habit, primaryTextColor));
+        widgets.add(const SizedBox(height: 14));
+      }
+    }
+
+    if (widgets.isNotEmpty && widgets.last is SizedBox) {
+      widgets.removeLast();
+    }
+
+    return widgets;
+  }
+
+  Widget buildGroupDivider() {
+    return Container(
+      key: const ValueKey("habit-template-group-divider"),
+      height: 1,
+      margin: const EdgeInsets.fromLTRB(0, 8, 0, 22),
+      color: selectedFilter == HabitFilter.evening
+          ? Colors.white.withOpacity(0.22)
+          : Colors.black.withOpacity(0.16),
+    );
+  }
+
+  Widget buildTemplateGroupHeader({
+    required String templateId,
+    required String templateTitle,
+    required Color primaryTextColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              templateTitle,
+              style: TextStyle(
+                color: primaryTextColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: "Template planını sil",
+            onPressed: () async {
+              await confirmDeleteTemplateGroup(
+                templateId: templateId,
+                templateTitle: templateTitle,
+              );
+            },
+            icon: Icon(
+              Icons.delete_sweep_outlined,
+              color: primaryTextColor.withOpacity(0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildHabitCard(HabitItem habit, Color primaryTextColor) {
+    final Color accentColor = getHabitAccentColor(habit);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: selectedFilter == HabitFilter.evening
+            ? const Color(0xFF2B3445)
+            : const Color(0xFFFFFCFA),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: habit.isCompleted
+              ? accentColor.withOpacity(0.55)
+              : Colors.black.withOpacity(0.05),
+          width: habit.isCompleted ? 1.4 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: habit.isCompleted
+                ? accentColor.withOpacity(0.20)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: habit.isCompleted ? 16 : 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(getHabitIcon(habit), color: accentColor, size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  habit.title,
+                  style: TextStyle(
+                    color: primaryTextColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    decoration: habit.isCompleted
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
+                ),
+                if (habit.description != null &&
+                    habit.description!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    habit.description!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: primaryTextColor.withOpacity(0.55),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      hasGoal(habit)
+                          ? Icons.track_changes_rounded
+                          : habit.isCompleted
+                          ? Icons.check_circle_rounded
+                          : Icons.hourglass_bottom_rounded,
+                      size: 14,
+                      color: habit.isCompleted
+                          ? accentColor
+                          : primaryTextColor.withOpacity(0.45),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        getHabitProgressText(habit),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: habit.isCompleted
+                              ? accentColor
+                              : primaryTextColor.withOpacity(0.45),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              await handleHabitTap(habit);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: habit.isCompleted
+                    ? accentColor
+                    : accentColor.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                habit.isCompleted
+                    ? Icons.check_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: habit.isCompleted
+                    ? Colors.white
+                    : accentColor.withOpacity(0.85),
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: "Alışkanlığı sil",
+            onPressed: () async {
+              await confirmDeleteHabit(habit);
+            },
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              color: primaryTextColor.withOpacity(0.45),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -900,170 +1246,9 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                     )
-                  : ListView.separated(
+                  : ListView(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      itemCount: filteredHabits.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
-                      itemBuilder: (context, index) {
-                        final habit = filteredHabits[index];
-                        final Color accentColor = getHabitAccentColor(habit);
-
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutCubic,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: selectedFilter == HabitFilter.evening
-                                ? const Color(0xFF2B3445)
-                                : const Color(0xFFFFFCFA),
-                            borderRadius: BorderRadius.circular(26),
-                            border: Border.all(
-                              color: habit.isCompleted
-                                  ? accentColor.withOpacity(0.55)
-                                  : Colors.black.withOpacity(0.05),
-                              width: habit.isCompleted ? 1.4 : 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: habit.isCompleted
-                                    ? accentColor.withOpacity(0.20)
-                                    : Colors.black.withOpacity(0.05),
-                                blurRadius: habit.isCompleted ? 16 : 10,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: accentColor.withOpacity(0.18),
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: Icon(
-                                  getHabitIcon(habit),
-                                  color: accentColor,
-                                  size: 26,
-                                ),
-                              ),
-
-                              const SizedBox(width: 14),
-
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      habit.title,
-                                      style: TextStyle(
-                                        color: primaryTextColor,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        decoration: habit.isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
-                                      ),
-                                    ),
-
-                                    if (habit.description != null &&
-                                        habit.description!
-                                            .trim()
-                                            .isNotEmpty) ...[
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        habit.description!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: primaryTextColor.withOpacity(
-                                            0.55,
-                                          ),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-
-                                    const SizedBox(height: 8),
-
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          hasGoal(habit)
-                                              ? Icons.track_changes_rounded
-                                              : habit.isCompleted
-                                              ? Icons.check_circle_rounded
-                                              : Icons.hourglass_bottom_rounded,
-                                          size: 14,
-                                          color: habit.isCompleted
-                                              ? accentColor
-                                              : primaryTextColor.withOpacity(
-                                                  0.45,
-                                                ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Flexible(
-                                          child: Text(
-                                            getHabitProgressText(habit),
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: habit.isCompleted
-                                                  ? accentColor
-                                                  : primaryTextColor
-                                                        .withOpacity(0.45),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              GestureDetector(
-                                onTap: () async {
-                                  await handleHabitTap(habit);
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 42,
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: habit.isCompleted
-                                        ? accentColor
-                                        : accentColor.withOpacity(0.12),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    habit.isCompleted
-                                        ? Icons.check_rounded
-                                        : Icons.radio_button_unchecked_rounded,
-                                    color: habit.isCompleted
-                                        ? Colors.white
-                                        : accentColor.withOpacity(0.85),
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                tooltip: "Alışkanlığı sil",
-                                onPressed: () async {
-                                  await confirmDeleteHabit(habit);
-                                },
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: primaryTextColor.withOpacity(0.45),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                      children: buildHabitList(primaryTextColor),
                     ),
             ),
           ],

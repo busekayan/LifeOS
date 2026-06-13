@@ -76,6 +76,12 @@ const ensureHabitTemplateSchema = () => {
       ALTER TABLE template_habits
       ADD COLUMN IF NOT EXISTS goal_unit VARCHAR(20);
 
+      ALTER TABLE habits
+      ADD COLUMN IF NOT EXISTS source_template_id TEXT;
+
+      ALTER TABLE habits
+      ADD COLUMN IF NOT EXISTS source_template_title VARCHAR(255);
+
       CREATE TABLE IF NOT EXISTS user_template_additions (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -83,6 +89,19 @@ const ensureHabitTemplateSchema = () => {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (user_id, template_id)
       );
+
+      UPDATE habits h
+      SET
+        source_template_id = ht.id::text,
+        source_template_title = ht.title
+      FROM user_template_additions uta
+      JOIN habit_templates ht
+        ON uta.template_id = ht.id::text
+      JOIN template_habits th
+        ON th.template_id = ht.id
+      WHERE h.user_id = uta.user_id
+        AND h.name = th.name
+        AND h.source_template_id IS NULL;
 
       INSERT INTO template_categories (name, emoji, display_order)
       SELECT
@@ -615,9 +634,19 @@ const addHabitTemplate = async (req, res) => {
       const habitResult = await client.query(
         `
         INSERT INTO habits
-          (user_id, name, description, frequency_type, period, target_value, goal_unit)
+          (
+            user_id,
+            name,
+            description,
+            frequency_type,
+            period,
+            target_value,
+            goal_unit,
+            source_template_id,
+            source_template_title
+          )
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
         `,
         [
@@ -628,6 +657,8 @@ const addHabitTemplate = async (req, res) => {
           habit.period,
           habit.target_value,
           habit.goal_unit,
+          templateId,
+          templateResult.rows[0].title,
         ]
       );
 
@@ -669,7 +700,115 @@ const addHabitTemplate = async (req, res) => {
   }
 };
 
+const deleteHabitTemplateGroup = async (req, res) => {
+  await ensureHabitTemplateSchema();
+
+  const templateId = req.params.id;
+
+  if (!templateId || typeof templateId !== "string") {
+    return res.status(400).json({
+      message: "Invalid template id",
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    const userId = req.user.userId;
+
+    await client.query("BEGIN");
+
+    const templateResult = await client.query(
+      `
+      SELECT id
+      FROM habit_templates
+      WHERE id = $1
+      `,
+      [templateId]
+    );
+
+    if (templateResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        message: "Habit template not found",
+      });
+    }
+
+    const habitResult = await client.query(
+      `
+      SELECT id
+      FROM habits
+      WHERE user_id = $1
+        AND source_template_id = $2
+      `,
+      [userId, templateId]
+    );
+
+    if (habitResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        message: "Template group not found",
+      });
+    }
+
+    const habitIds = habitResult.rows.map((habit) => habit.id);
+
+    await client.query(
+      `
+      DELETE FROM habit_logs
+      WHERE user_id = $1
+        AND habit_id = ANY($2::int[])
+      `,
+      [userId, habitIds]
+    );
+
+    await client.query(
+      `
+      DELETE FROM habit_days
+      WHERE habit_id = ANY($1::int[])
+      `,
+      [habitIds]
+    );
+
+    await client.query(
+      `
+      DELETE FROM habits
+      WHERE user_id = $1
+        AND source_template_id = $2
+      `,
+      [userId, templateId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM user_template_additions
+      WHERE user_id = $1
+        AND template_id = $2
+      `,
+      [userId, templateId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      message: "Template group deleted successfully",
+      deletedCount: habitIds.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+
+    console.error("DELETE HABIT TEMPLATE GROUP ERROR:", err);
+
+    return res.status(500).json({
+      message: "Habit template group could not be deleted",
+    });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getHabitTemplates,
   addHabitTemplate,
+  deleteHabitTemplateGroup,
 };

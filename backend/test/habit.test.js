@@ -158,6 +158,7 @@ describe("habit APIs", () => {
   });
 
   it("lists habits for the authenticated user grouped by habit days", async () => {
+    mockPool.queue.push({ rows: [] }); // source columns setup
     mockPool.queue.push({
       rows: [
         {
@@ -168,6 +169,8 @@ describe("habit APIs", () => {
           frequency_type: "weekly",
           target_value: null,
           goal_unit: null,
+          source_template_id: null,
+          source_template_title: null,
           day_of_week: 1,
           current_value: 1,
           is_completed: true,
@@ -180,6 +183,8 @@ describe("habit APIs", () => {
           frequency_type: "weekly",
           target_value: null,
           goal_unit: null,
+          source_template_id: null,
+          source_template_title: null,
           day_of_week: 3,
           current_value: 1,
           is_completed: true,
@@ -193,7 +198,8 @@ describe("habit APIs", () => {
     await getHabits(req, res);
 
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(mockPool.queries[0].params, [7, "2026-06-11"]);
+    assert.match(mockPool.queries[0].sql, /ALTER TABLE habits/i);
+    assert.deepEqual(mockPool.queries[1].params, [7, "2026-06-11"]);
     assert.deepEqual(res.body.habits, [
       {
         id: 42,
@@ -203,6 +209,8 @@ describe("habit APIs", () => {
         frequency_type: "weekly",
         target_value: null,
         goal_type: null,
+        source_template_id: null,
+        source_template_title: null,
         current_value: 1,
         is_completed: true,
         days: [1, 3],

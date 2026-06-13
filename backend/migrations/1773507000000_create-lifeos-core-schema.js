@@ -34,6 +34,12 @@ exports.up = (pgm) => {
     goal_unit: {
       type: "varchar(20)",
     },
+    source_template_id: {
+      type: "text",
+    },
+    source_template_title: {
+      type: "varchar(255)",
+    },
     created_at: {
       type: "timestamp",
       notNull: true,

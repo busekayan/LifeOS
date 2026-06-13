@@ -1,5 +1,48 @@
 const pool = require("../config/db");
 
+let habitSourceColumnsReadyPromise;
+
+const ensureHabitSourceColumns = () => {
+  if (!habitSourceColumnsReadyPromise) {
+    habitSourceColumnsReadyPromise = pool.query(`
+      ALTER TABLE habits
+      ADD COLUMN IF NOT EXISTS source_template_id TEXT;
+
+      ALTER TABLE habits
+      ADD COLUMN IF NOT EXISTS source_template_title VARCHAR(255);
+
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name = 'user_template_additions'
+        ) AND EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name = 'habit_templates'
+        ) AND EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name = 'template_habits'
+        ) THEN
+          UPDATE habits h
+          SET
+            source_template_id = ht.id::text,
+            source_template_title = ht.title
+          FROM user_template_additions uta
+          JOIN habit_templates ht
+            ON uta.template_id = ht.id::text
+          JOIN template_habits th
+            ON th.template_id = ht.id
+          WHERE h.user_id = uta.user_id
+            AND h.name = th.name
+            AND h.source_template_id IS NULL;
+        END IF;
+      END $$;
+    `);
+  }
+
+  return habitSourceColumnsReadyPromise;
+};
+
 const createHabit = async (req, res) => {
   const client = await pool.connect();
 
@@ -132,6 +175,8 @@ const createHabit = async (req, res) => {
 
 const getHabits = async (req, res) => {
   try {
+    await ensureHabitSourceColumns();
+
     const userId = req.user.userId;
     const { date } = req.query;
 
@@ -151,6 +196,8 @@ const getHabits = async (req, res) => {
         h.frequency_type,
         h.target_value,
         h.goal_unit,
+        h.source_template_id,
+        h.source_template_title,
         hd.day_of_week,
         CASE
           WHEN h.target_value IS NOT NULL THEN
@@ -191,6 +238,8 @@ const getHabits = async (req, res) => {
           frequency_type: row.frequency_type,
           target_value: row.target_value,
           goal_type: row.goal_unit,
+          source_template_id: row.source_template_id,
+          source_template_title: row.source_template_title,
           current_value: row.current_value,
           is_completed: row.is_completed,
           days: [],

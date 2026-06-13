@@ -45,10 +45,19 @@ Widget buildHomeScreen({
   );
 }
 
+void setLargeTestScreen(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1200, 1800);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 Map<String, Object?> habitJson({
   required int id,
   required String name,
   bool isCompleted = false,
+  String? sourceTemplateId,
+  String? sourceTemplateTitle,
 }) {
   return {
     "id": id,
@@ -61,6 +70,8 @@ Map<String, Object?> habitJson({
     "current_value": isCompleted ? 1 : 0,
     "is_completed": isCompleted,
     "days": [4],
+    "source_template_id": sourceTemplateId,
+    "source_template_title": sourceTemplateTitle,
   };
 }
 
@@ -219,5 +230,104 @@ void main() {
 
     expect(find.text("Read 20 pages"), findsOneWidget);
     expect(find.text("Alışkanlık silinemedi."), findsOneWidget);
+  });
+
+  testWidgets("deletes a template habit group after confirmation", (
+    tester,
+  ) async {
+    setLargeTestScreen(tester);
+
+    Uri? deleteUrl;
+
+    await tester.pumpWidget(
+      buildHomeScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({
+            "habits": [
+              habitJson(
+                id: 1,
+                name: "7 AM Uyanış",
+                sourceTemplateId: "10",
+                sourceTemplateTitle: "Sabah Savaşçısı",
+              ),
+              habitJson(
+                id: 2,
+                name: "10 dk Esneme",
+                sourceTemplateId: "10",
+                sourceTemplateTitle: "Sabah Savaşçısı",
+              ),
+              habitJson(id: 3, name: "Read 20 pages"),
+            ],
+          }, 200);
+        },
+        httpDelete: (Uri url, {Map<String, String>? headers}) async {
+          deleteUrl = url;
+          return jsonResponse({"message": "deleted", "deletedCount": 2}, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Sabah Savaşçısı"), findsOneWidget);
+    expect(find.text("7 AM Uyanış"), findsOneWidget);
+    expect(find.text("10 dk Esneme"), findsOneWidget);
+    expect(find.text("Read 20 pages"), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Template planını sil"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Template planını sil"), findsOneWidget);
+    expect(
+      find.text(
+        "'Sabah Savaşçısı' planındaki tüm alışkanlıkları silmek istediğine emin misin?",
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text("Sil"));
+    await tester.pumpAndSettle();
+
+    expect(deleteUrl.toString(), contains("/habit-templates/10"));
+    expect(find.text("Sabah Savaşçısı"), findsNothing);
+    expect(find.text("7 AM Uyanış"), findsNothing);
+    expect(find.text("10 dk Esneme"), findsNothing);
+    expect(find.text("Read 20 pages"), findsOneWidget);
+    expect(find.text("Template planı silindi."), findsOneWidget);
+  });
+
+  testWidgets("keeps template habit group visible when delete request fails", (
+    tester,
+  ) async {
+    setLargeTestScreen(tester);
+
+    await tester.pumpWidget(
+      buildHomeScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({
+            "habits": [
+              habitJson(
+                id: 1,
+                name: "7 AM Uyanış",
+                sourceTemplateId: "10",
+                sourceTemplateTitle: "Sabah Savaşçısı",
+              ),
+            ],
+          }, 200);
+        },
+        httpDelete: (Uri url, {Map<String, String>? headers}) async {
+          return jsonResponse({"message": "error"}, 500);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip("Template planını sil"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Sil"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Sabah Savaşçısı"), findsOneWidget);
+    expect(find.text("7 AM Uyanış"), findsOneWidget);
+    expect(find.text("Template planı silinemedi."), findsOneWidget);
   });
 }

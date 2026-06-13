@@ -55,6 +55,7 @@ require.cache[require.resolve("../config/db")] = { exports: mockPool };
 const {
   getHabitTemplates,
   addHabitTemplate,
+  deleteHabitTemplateGroup,
 } = require("../controllers/habitTemplateController");
 const verifyToken = require("../middleware/verifyToken");
 
@@ -203,6 +204,8 @@ describe("habit template APIs", () => {
       "morning",
       null,
       null,
+      "1",
+      "Sabah Savaşçısı",
     ]);
     assert.match(mockClient.queries[5].sql, /INSERT INTO habit_days/i);
     assert.deepEqual(mockClient.queries[5].params, [101, 1]);
@@ -282,6 +285,56 @@ describe("habit template APIs", () => {
 
     assert.equal(res.statusCode, 400);
     assert.equal(res.body.message, "This template has no habits");
+    assert.equal(mockClient.released, true);
+  });
+
+  it("deletes a template habit group and allows it to be added again", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [{ id: 1 }] });
+    mockClient.queue.push({ rows: [{ id: 101 }, { id: 102 }] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] }); // COMMIT
+
+    const req = authenticatedRequest({ params: { id: "1" } });
+    const res = createResponse();
+
+    await deleteHabitTemplateGroup(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.message, "Template group deleted successfully");
+    assert.equal(res.body.deletedCount, 2);
+    assert.match(mockClient.queries[2].sql, /FROM habits/i);
+    assert.deepEqual(mockClient.queries[2].params, [7, "1"]);
+    assert.match(mockClient.queries[3].sql, /DELETE FROM habit_logs/i);
+    assert.deepEqual(mockClient.queries[3].params, [7, [101, 102]]);
+    assert.match(mockClient.queries[4].sql, /DELETE FROM habit_days/i);
+    assert.deepEqual(mockClient.queries[4].params, [[101, 102]]);
+    assert.match(mockClient.queries[5].sql, /DELETE FROM habits/i);
+    assert.deepEqual(mockClient.queries[5].params, [7, "1"]);
+    assert.match(mockClient.queries[6].sql, /DELETE FROM user_template_additions/i);
+    assert.deepEqual(mockClient.queries[6].params, [7, "1"]);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("does not delete another user's template group", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [{ id: 1 }] });
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] }); // ROLLBACK
+
+    const req = authenticatedRequest({ params: { id: "1" } });
+    const res = createResponse();
+
+    await deleteHabitTemplateGroup(req, res);
+
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.message, "Template group not found");
+    assert.match(mockClient.queries[2].sql, /WHERE user_id = \$1/i);
+    assert.deepEqual(mockClient.queries[2].params, [7, "1"]);
+    assert.match(mockClient.queries[3].sql, /ROLLBACK/i);
     assert.equal(mockClient.released, true);
   });
 });
