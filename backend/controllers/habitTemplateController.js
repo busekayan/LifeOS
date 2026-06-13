@@ -734,12 +734,30 @@ const deleteHabitTemplateGroup = async (req, res) => {
       });
     }
 
+    const templateGroupCondition = `
+      h.user_id = $1
+      AND (
+        h.source_template_id = $2
+        OR (
+          h.source_template_id IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM user_template_additions uta
+            JOIN template_habits th
+              ON th.template_id::text = uta.template_id
+            WHERE uta.user_id = $1
+              AND uta.template_id = $2
+              AND th.name = h.name
+          )
+        )
+      )
+    `;
+
     const habitResult = await client.query(
       `
       SELECT id
-      FROM habits
-      WHERE user_id = $1
-        AND source_template_id = $2
+      FROM habits h
+      WHERE ${templateGroupCondition}
       `,
       [userId, templateId]
     );
@@ -755,26 +773,29 @@ const deleteHabitTemplateGroup = async (req, res) => {
 
     await client.query(
       `
-      DELETE FROM habit_logs
-      WHERE user_id = $1
-        AND habit_id = ANY($2::int[])
+      DELETE FROM habit_logs hl
+      USING habits h
+      WHERE hl.habit_id = h.id
+        AND hl.user_id = $1
+        AND ${templateGroupCondition}
       `,
-      [userId, habitIds]
+      [userId, templateId]
     );
 
     await client.query(
       `
-      DELETE FROM habit_days
-      WHERE habit_id = ANY($1::int[])
+      DELETE FROM habit_days hd
+      USING habits h
+      WHERE hd.habit_id = h.id
+        AND ${templateGroupCondition}
       `,
-      [habitIds]
+      [userId, templateId]
     );
 
     await client.query(
       `
-      DELETE FROM habits
-      WHERE user_id = $1
-        AND source_template_id = $2
+      DELETE FROM habits h
+      WHERE ${templateGroupCondition}
       `,
       [userId, templateId]
     );

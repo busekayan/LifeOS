@@ -816,7 +816,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget buildGroupDivider() {
     return Container(
-      key: const ValueKey("habit-template-group-divider"),
       height: 1,
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 22),
       color: selectedFilter == HabitFilter.evening

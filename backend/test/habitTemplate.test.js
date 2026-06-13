@@ -308,10 +308,11 @@ describe("habit template APIs", () => {
     assert.equal(res.body.deletedCount, 2);
     assert.match(mockClient.queries[2].sql, /FROM habits/i);
     assert.deepEqual(mockClient.queries[2].params, [7, "1"]);
+    assert.match(mockClient.queries[2].sql, /EXISTS/i);
     assert.match(mockClient.queries[3].sql, /DELETE FROM habit_logs/i);
-    assert.deepEqual(mockClient.queries[3].params, [7, [101, 102]]);
+    assert.deepEqual(mockClient.queries[3].params, [7, "1"]);
     assert.match(mockClient.queries[4].sql, /DELETE FROM habit_days/i);
-    assert.deepEqual(mockClient.queries[4].params, [[101, 102]]);
+    assert.deepEqual(mockClient.queries[4].params, [7, "1"]);
     assert.match(mockClient.queries[5].sql, /DELETE FROM habits/i);
     assert.deepEqual(mockClient.queries[5].params, [7, "1"]);
     assert.match(mockClient.queries[6].sql, /DELETE FROM user_template_additions/i);
@@ -332,7 +333,7 @@ describe("habit template APIs", () => {
 
     assert.equal(res.statusCode, 404);
     assert.equal(res.body.message, "Template group not found");
-    assert.match(mockClient.queries[2].sql, /WHERE user_id = \$1/i);
+    assert.match(mockClient.queries[2].sql, /h\.user_id = \$1/i);
     assert.deepEqual(mockClient.queries[2].params, [7, "1"]);
     assert.match(mockClient.queries[3].sql, /ROLLBACK/i);
     assert.equal(mockClient.released, true);
