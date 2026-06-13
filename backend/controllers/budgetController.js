@@ -97,6 +97,195 @@ const getAcceptedFriends = async (req, res) => {
   }
 };
 
+const getIncomingFriendInvitations = async (req, res) => {
+  try {
+    await ensureBudgetSchema();
+
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `
+      SELECT
+        f.id,
+        f.created_at,
+        u.id AS requester_id,
+        u.first_name,
+        u.last_name,
+        u.email
+      FROM friendships f
+      JOIN users u
+        ON u.id = f.requester_id
+      WHERE f.addressee_id = $1
+        AND f.status = 'pending'
+      ORDER BY f.created_at DESC
+      `,
+      [userId]
+    );
+
+    return res.status(200).json({
+      invitations: result.rows,
+    });
+  } catch (err) {
+    console.error("GET FRIEND INVITATIONS ERROR:", err);
+
+    return res.status(500).json({
+      message: "Friend invitations could not be loaded",
+    });
+  }
+};
+
+const createFriendInvitation = async (req, res) => {
+  try {
+    await ensureBudgetSchema();
+
+    const userId = req.user.userId;
+    const email = req.body.email?.trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        message: "Email is required",
+      });
+    }
+
+    const userResult = await pool.query(
+      `
+      SELECT id, first_name, last_name, email
+      FROM users
+      WHERE LOWER(email) = $1
+      `,
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "User with this email was not found",
+      });
+    }
+
+    const invitedUser = userResult.rows[0];
+
+    if (Number(invitedUser.id) === userId) {
+      return res.status(400).json({
+        message: "You cannot invite yourself",
+      });
+    }
+
+    const existingResult = await pool.query(
+      `
+      SELECT id, status
+      FROM friendships
+      WHERE (
+        requester_id = $1 AND addressee_id = $2
+      ) OR (
+        requester_id = $2 AND addressee_id = $1
+      )
+      `,
+      [userId, invitedUser.id]
+    );
+
+    const existingFriendship = existingResult.rows[0];
+
+    if (existingFriendship?.status === "pending") {
+      return res.status(409).json({
+        message: "Friend invitation is already pending",
+      });
+    }
+
+    if (existingFriendship?.status === "accepted") {
+      return res.status(409).json({
+        message: "User is already your friend",
+      });
+    }
+
+    const invitationResult = existingFriendship
+      ? await pool.query(
+          `
+          UPDATE friendships
+          SET requester_id = $1,
+              addressee_id = $2,
+              status = 'pending',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3
+          RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+          `,
+          [userId, invitedUser.id, existingFriendship.id]
+        )
+      : await pool.query(
+          `
+          INSERT INTO friendships (requester_id, addressee_id, status)
+          VALUES ($1, $2, 'pending')
+          RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+          `,
+          [userId, invitedUser.id]
+        );
+
+    return res.status(201).json({
+      message: "Friend invitation sent successfully",
+      invitation: invitationResult.rows[0],
+      invited_user: invitedUser,
+    });
+  } catch (err) {
+    console.error("CREATE FRIEND INVITATION ERROR:", err);
+
+    return res.status(500).json({
+      message: "Friend invitation could not be sent",
+    });
+  }
+};
+
+const respondToFriendInvitation = async (req, res) => {
+  try {
+    await ensureBudgetSchema();
+
+    const userId = req.user.userId;
+    const invitationId = Number(req.params.id);
+    const action = req.body.action;
+
+    if (!Number.isInteger(invitationId) || invitationId <= 0) {
+      return res.status(400).json({
+        message: "Invalid invitation id",
+      });
+    }
+
+    if (!["accept", "reject"].includes(action)) {
+      return res.status(400).json({
+        message: "Invalid invitation action",
+      });
+    }
+
+    const status = action === "accept" ? "accepted" : "rejected";
+    const result = await pool.query(
+      `
+      UPDATE friendships
+      SET status = $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+        AND addressee_id = $3
+        AND status = 'pending'
+      RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+      `,
+      [status, invitationId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Friend invitation was not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: `Friend invitation ${status}`,
+      invitation: result.rows[0],
+    });
+  } catch (err) {
+    console.error("RESPOND FRIEND INVITATION ERROR:", err);
+
+    return res.status(500).json({
+      message: "Friend invitation could not be updated",
+    });
+  }
+};
+
 const getBudgetGroups = async (req, res) => {
   try {
     await ensureBudgetSchema();
@@ -438,6 +627,9 @@ const createBudgetGroup = async (req, res) => {
 
 module.exports = {
   getAcceptedFriends,
+  getIncomingFriendInvitations,
+  createFriendInvitation,
+  respondToFriendInvitation,
   getPersonalTransactions,
   createPersonalTransaction,
   getBudgetGroups,

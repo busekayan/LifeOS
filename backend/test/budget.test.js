@@ -58,6 +58,9 @@ require.cache[require.resolve("../config/db")] = { exports: mockPool };
 
 const {
   getAcceptedFriends,
+  getIncomingFriendInvitations,
+  createFriendInvitation,
+  respondToFriendInvitation,
   getPersonalTransactions,
   createPersonalTransaction,
   getBudgetGroups,
@@ -82,10 +85,11 @@ const createResponse = () => {
   return res;
 };
 
-const authenticatedRequest = ({ body = {}, query = {} } = {}) => ({
+const authenticatedRequest = ({ body = {}, query = {}, params = {} } = {}) => ({
   user: { userId: 7 },
   body,
   query,
+  params,
 });
 
 describe("budget group APIs", () => {
@@ -121,6 +125,205 @@ describe("budget group APIs", () => {
     assert.deepEqual(mockPool.queries[1].params, [7]);
     assert.equal(res.body.friends.length, 1);
     assert.equal(res.body.friends[0].email, "ece@example.com");
+  });
+
+  it("lists incoming friend invitations", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 5,
+          requester_id: 12,
+          first_name: "Ece",
+          last_name: "Yilmaz",
+          email: "ece@example.com",
+          created_at: "2026-06-13",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest();
+    const res = createResponse();
+
+    await getIncomingFriendInvitations(req, res);
+
+    assert.equal(res.statusCode, 200);
+    const invitationsQuery = mockPool.queries.find((query) =>
+      /addressee_id = \$1/i.test(query.sql)
+    );
+    assert.ok(invitationsQuery);
+    assert.match(invitationsQuery.sql, /status = 'pending'/i);
+    assert.deepEqual(invitationsQuery.params, [7]);
+    assert.equal(res.body.invitations.length, 1);
+    assert.equal(res.body.invitations[0].email, "ece@example.com");
+  });
+
+  it("sends a friend invitation by email", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 12,
+          first_name: "Ece",
+          last_name: "Yilmaz",
+          email: "ece@example.com",
+        },
+      ],
+    });
+    mockPool.queue.push({ rows: [] });
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 5,
+          requester_id: 7,
+          addressee_id: 12,
+          status: "pending",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      body: { email: " ECE@example.com " },
+    });
+    const res = createResponse();
+
+    await createFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.message, "Friend invitation sent successfully");
+    const userQuery = mockPool.queries.find((query) =>
+      /LOWER\(email\) = \$1/i.test(query.sql)
+    );
+    const insertQuery = mockPool.queries.find((query) =>
+      /INSERT INTO friendships/i.test(query.sql)
+    );
+    assert.ok(userQuery);
+    assert.ok(insertQuery);
+    assert.deepEqual(userQuery.params, ["ece@example.com"]);
+    assert.deepEqual(insertQuery.params, [7, 12]);
+  });
+
+  it("rejects inviting yourself", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 7,
+          first_name: "Buse",
+          last_name: "Kayan",
+          email: "buse@example.com",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      body: { email: "buse@example.com" },
+    });
+    const res = createResponse();
+
+    await createFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "You cannot invite yourself");
+  });
+
+  it("handles duplicate pending friend invitations", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 12,
+          first_name: "Ece",
+          last_name: "Yilmaz",
+          email: "ece@example.com",
+        },
+      ],
+    });
+    mockPool.queue.push({
+      rows: [{ id: 5, status: "pending" }],
+    });
+
+    const req = authenticatedRequest({
+      body: { email: "ece@example.com" },
+    });
+    const res = createResponse();
+
+    await createFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.message, "Friend invitation is already pending");
+  });
+
+  it("handles duplicate accepted friendships", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 12,
+          first_name: "Ece",
+          last_name: "Yilmaz",
+          email: "ece@example.com",
+        },
+      ],
+    });
+    mockPool.queue.push({
+      rows: [{ id: 5, status: "accepted" }],
+    });
+
+    const req = authenticatedRequest({
+      body: { email: "ece@example.com" },
+    });
+    const res = createResponse();
+
+    await createFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.message, "User is already your friend");
+  });
+
+  it("accepts an incoming friend invitation", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 5,
+          requester_id: 12,
+          addressee_id: 7,
+          status: "accepted",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      params: { id: "5" },
+      body: { action: "accept" },
+    });
+    const res = createResponse();
+
+    await respondToFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.invitation.status, "accepted");
+    assert.deepEqual(mockPool.queries.at(-1).params, ["accepted", 5, 7]);
+  });
+
+  it("rejects an incoming friend invitation", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 5,
+          requester_id: 12,
+          addressee_id: 7,
+          status: "rejected",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      params: { id: "5" },
+      body: { action: "reject" },
+    });
+    const res = createResponse();
+
+    await respondToFriendInvitation(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.invitation.status, "rejected");
+    assert.deepEqual(mockPool.queries.at(-1).params, ["rejected", 5, 7]);
   });
 
   it("lists budget groups for the authenticated user", async () => {

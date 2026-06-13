@@ -27,6 +27,10 @@ class MyApp extends StatelessWidget {
       home: const AuthCheckScreen(),
       onGenerateRoute: (settings) {
         switch (settings.name) {
+          case "/login":
+            return NoTransitionPageRoute(
+              builder: (context) => const LoginScreen(),
+            );
           case "/home":
             return NoTransitionPageRoute(
               builder: (context) => const HomePage(),

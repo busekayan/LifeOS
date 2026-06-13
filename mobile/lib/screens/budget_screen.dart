@@ -47,6 +47,37 @@ class BudgetFriend {
   }
 }
 
+class FriendInvitation {
+  final int id;
+  final int requesterId;
+  final String firstName;
+  final String lastName;
+  final String email;
+
+  const FriendInvitation({
+    required this.id,
+    required this.requesterId,
+    required this.firstName,
+    required this.lastName,
+    required this.email,
+  });
+
+  factory FriendInvitation.fromJson(Map<String, dynamic> json) {
+    return FriendInvitation(
+      id: json["id"] as int,
+      requesterId: json["requester_id"] as int,
+      firstName: json["first_name"]?.toString() ?? "",
+      lastName: json["last_name"]?.toString() ?? "",
+      email: json["email"]?.toString() ?? "",
+    );
+  }
+
+  String get displayName {
+    final name = "$firstName $lastName".trim();
+    return name.isEmpty ? email : name;
+  }
+}
+
 class BudgetGroup {
   final int id;
   final String name;
@@ -158,6 +189,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   int selectedTab = 0;
 
   List<BudgetFriend> friends = [];
+  List<FriendInvitation> incomingInvitations = [];
   List<BudgetGroup> groups = [];
   BudgetSummary summary = const BudgetSummary(
     incomeTotal: 0,
@@ -195,6 +227,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ApiConfig.uri("/budget/friends"),
         headers: headers,
       );
+      final invitationsResponse = await widget.httpGet(
+        ApiConfig.uri("/budget/friend-invitations"),
+        headers: headers,
+      );
       final groupsResponse = await widget.httpGet(
         ApiConfig.uri("/budget/groups"),
         headers: headers,
@@ -207,6 +243,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       if (!mounted) return;
 
       if (friendsResponse.statusCode != 200 ||
+          invitationsResponse.statusCode != 200 ||
           groupsResponse.statusCode != 200 ||
           transactionsResponse.statusCode != 200) {
         setState(() {
@@ -217,6 +254,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       }
 
       final friendsData = jsonDecode(friendsResponse.body);
+      final invitationsData = jsonDecode(invitationsResponse.body);
       final groupsData = jsonDecode(groupsResponse.body);
       final transactionsData = jsonDecode(transactionsResponse.body);
 
@@ -225,6 +263,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
             .whereType<Map<String, dynamic>>()
             .map(BudgetFriend.fromJson)
             .toList();
+        incomingInvitations =
+            (invitationsData["invitations"] as List<dynamic>? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .map(FriendInvitation.fromJson)
+                .toList();
         groups = (groupsData["groups"] as List<dynamic>? ?? [])
             .whereType<Map<String, dynamic>>()
             .map(BudgetGroup.fromJson)
@@ -396,6 +439,150 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Ortak bütçe grubu oluşturulamadı.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
+
+  Future<void> showInviteFriendDialog() async {
+    final emailController = TextEditingController();
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Arkadaş davet et"),
+          content: TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: "E-posta",
+              hintText: "arkadas@example.com",
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Vazgeç"),
+            ),
+            TextButton(
+              onPressed: () {
+                if (!emailController.text.trim().contains("@")) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Geçerli bir e-posta gir.")),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context, true);
+              },
+              child: const Text("Gönder"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (submitted == true) {
+      await sendFriendInvitation(emailController.text.trim());
+    }
+  }
+
+  Future<void> sendFriendInvitation(String email) async {
+    try {
+      final accessToken = await widget.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await widget.httpPost(
+        ApiConfig.uri("/budget/friend-invitations"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+        body: jsonEncode({"email": email}),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Arkadaş daveti gönderildi.")),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Arkadaş daveti gönderilemedi.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
+
+  Future<void> respondToFriendInvitation({
+    required FriendInvitation invitation,
+    required String action,
+  }) async {
+    try {
+      final accessToken = await widget.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await widget.httpPost(
+        ApiConfig.uri("/budget/friend-invitations/${invitation.id}/respond"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+        body: jsonEncode({"action": action}),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          incomingInvitations.removeWhere((item) => item.id == invitation.id);
+        });
+
+        if (action == "accept") {
+          await fetchBudgetData();
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == "accept"
+                  ? "Arkadaş daveti kabul edildi."
+                  : "Arkadaş daveti reddedildi.",
+            ),
+          ),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Arkadaş daveti güncellenemedi.")),
       );
     } catch (e) {
       if (!mounted) return;
@@ -940,34 +1127,299 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return ListView(
       physics: const BouncingScrollPhysics(),
       children: [
+        buildSharedHeader(),
+        const SizedBox(height: 14),
+        if (incomingInvitations.isNotEmpty) ...[
+          buildIncomingInvitationsNotice(),
+          const SizedBox(height: 14),
+        ],
+        const Text(
+          "Gruplar",
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 10),
         if (groups.isEmpty)
           buildSharedEmptyState()
         else ...[
           ...groups.map(buildGroupCard),
           const SizedBox(height: 8),
         ],
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: showCreateGroupDialog,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C63FF),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            icon: const Icon(Icons.group_add_rounded),
-            label: const Text(
-              "Grup Oluştur",
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ),
+        buildAcceptedFriendsStrip(),
         const SizedBox(height: 20),
       ],
+    );
+  }
+
+  Widget buildSharedHeader() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF222831),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.groups_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Ortak Bütçe",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  "Gruplarını ve davetlerini buradan yönet.",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SizedBox(
+                height: 38,
+                child: ElevatedButton.icon(
+                  onPressed: showCreateGroupDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C63FF),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.group_add_rounded, size: 16),
+                  label: const Text(
+                    "Grup Oluştur",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: showInviteFriendDialog,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 34),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 15),
+                label: const Text(
+                  "Davet Gönder",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildIncomingInvitationsNotice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFD166).withOpacity(0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFD166),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.notifications_active_rounded,
+                  color: Color(0xFF5D4200),
+                  size: 17,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Gelen davetler (${incomingInvitations.length})",
+                  style: const TextStyle(
+                    color: Color(0xFF4A3600),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...incomingInvitations.map(buildInvitationRow),
+        ],
+      ),
+    );
+  }
+
+  Widget buildAcceptedFriendsStrip() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.people_alt_rounded,
+              color: Color(0xFF6C63FF),
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: friends.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 7),
+                    child: Text(
+                      "Arkadaş ekleyince ortak gruplara hızlıca dahil edebilirsin.",
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.52),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: friends.map((friend) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          friend.displayName,
+                          style: const TextStyle(
+                            color: Color(0xFF4F46E5),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildInvitationRow(FriendInvitation invitation) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  invitation.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF2F2500),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  invitation.email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.52),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: "Reddet",
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFFFECEC),
+              foregroundColor: const Color(0xFFC84C4C),
+            ),
+            onPressed: () => respondToFriendInvitation(
+              invitation: invitation,
+              action: "reject",
+            ),
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: "Kabul Et",
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFE5F6F4),
+              foregroundColor: const Color(0xFF16877C),
+            ),
+            onPressed: () => respondToFriendInvitation(
+              invitation: invitation,
+              action: "accept",
+            ),
+            icon: const Icon(Icons.check_rounded, size: 18),
+          ),
+        ],
+      ),
     );
   }
 

@@ -5,13 +5,6 @@ class AppBottomNavigationBar extends StatelessWidget {
 
   const AppBottomNavigationBar({super.key, required this.currentIndex});
 
-  void _showComingSoon(BuildContext context, String title) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("$title ekranı yakında eklenecek.")));
-  }
-
   void _handleTap(BuildContext context, int index) {
     if (index == currentIndex) return;
 
@@ -29,7 +22,7 @@ class AppBottomNavigationBar extends StatelessWidget {
         Navigator.pushReplacementNamed(context, "/budget");
         break;
       case 4:
-        _showComingSoon(context, "Profil");
+        Navigator.pushReplacementNamed(context, "/login");
         break;
     }
   }

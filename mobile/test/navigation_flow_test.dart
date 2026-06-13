@@ -175,7 +175,7 @@ void main() {
     expect(find.text("Budget route"), findsOneWidget);
   });
 
-  testWidgets("bottom navigation shows placeholder for unavailable sections", (
+  testWidgets("bottom navigation opens login route from profile", (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -185,6 +185,7 @@ void main() {
           "/explore": (context) => const TestPage(title: "Explore route"),
           "/daily": (context) => const TestPage(title: "Daily route"),
           "/budget": (context) => const TestPage(title: "Budget route"),
+          "/login": (context) => const TestPage(title: "Login route"),
         },
         home: const Scaffold(
           body: Text("Current page"),
@@ -196,8 +197,9 @@ void main() {
     expect(find.text("Araçlar"), findsNothing);
 
     await tester.tap(find.text("Profil"));
-    await tester.pump();
-    expect(find.text("Profil ekranı yakında eklenecek."), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    expect(find.text("Login route"), findsOneWidget);
   });
 
   testWidgets("protected screen shows an error without token", (tester) async {
