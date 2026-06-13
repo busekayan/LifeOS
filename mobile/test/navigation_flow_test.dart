@@ -147,9 +147,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text("Keşfet"));
+    await tester.tap(find.text("Günlük"));
     await tester.pumpAndSettle();
-    expect(find.text("Explore route"), findsOneWidget);
+    expect(find.text("Daily route"), findsOneWidget);
   });
 
   testWidgets("bottom navigation shows placeholder for unavailable sections", (
@@ -169,9 +169,11 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text("Araçlar"));
+    expect(find.text("Araçlar"), findsNothing);
+
+    await tester.tap(find.text("Bütçe"));
     await tester.pump();
-    expect(find.text("Araçlar ekranı yakında eklenecek."), findsOneWidget);
+    expect(find.text("Bütçe ekranı yakında eklenecek."), findsOneWidget);
   });
 
   testWidgets("protected screen shows an error without token", (tester) async {

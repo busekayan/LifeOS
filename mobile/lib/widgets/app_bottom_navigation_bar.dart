@@ -23,15 +23,12 @@ class AppBottomNavigationBar extends StatelessWidget {
         Navigator.pushReplacementNamed(context, "/explore");
         break;
       case 2:
-        _showComingSoon(context, "Araçlar");
-        break;
-      case 3:
         Navigator.pushReplacementNamed(context, "/daily");
         break;
-      case 4:
+      case 3:
         _showComingSoon(context, "Bütçe");
         break;
-      case 5:
+      case 4:
         _showComingSoon(context, "Profil");
         break;
     }
@@ -55,11 +52,6 @@ class AppBottomNavigationBar extends StatelessWidget {
           icon: Icon(Icons.explore_outlined),
           activeIcon: Icon(Icons.explore),
           label: "Keşfet",
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.bar_chart_outlined),
-          activeIcon: Icon(Icons.bar_chart),
-          label: "Araçlar",
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.calendar_today_outlined),

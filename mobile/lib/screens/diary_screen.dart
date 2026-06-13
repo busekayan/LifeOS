@@ -391,7 +391,7 @@ class _DailyScreenState extends State<DailyScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F2FF),
 
-      bottomNavigationBar: const AppBottomNavigationBar(currentIndex: 3),
+      bottomNavigationBar: const AppBottomNavigationBar(currentIndex: 2),
 
       body: SafeArea(
         child: isLoading
