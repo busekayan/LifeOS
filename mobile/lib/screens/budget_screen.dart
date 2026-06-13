@@ -433,12 +433,98 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          "Kişisel gelir ve gider takibi bir sonraki bütçe taskında bağlanacak.",
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black54),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: buildSummaryMetric(
+                title: "Gelir",
+                amount: "0 TL",
+                color: const Color(0xFF26A69A),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: buildSummaryMetric(
+                title: "Kişisel Gider",
+                amount: "0 TL",
+                color: const Color(0xFFE57373),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        buildSummaryMetric(
+          title: "Ortak Gider Payın",
+          amount: "0 TL",
+          color: const Color(0xFFFFB86B),
+          fullWidth: true,
+        ),
+        const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Bu Ay",
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Gelir, kişisel gider ve ortak gider payı bu alanda birlikte takip edilecek.",
+                style: TextStyle(
+                  color: Colors.black.withOpacity(0.55),
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  Widget buildSummaryMetric({
+    required String title,
+    required String amount,
+    required Color color,
+    bool fullWidth = false,
+  }) {
+    return Container(
+      width: fullWidth ? double.infinity : null,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.black.withOpacity(0.55),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            amount,
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

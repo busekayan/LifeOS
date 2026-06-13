@@ -70,6 +70,21 @@ Future<void> setLargeTestScreen(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets("shows personal budget summary layout", (tester) async {
+    await setLargeTestScreen(tester);
+    await tester.pumpWidget(buildBudgetScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text("Bütçe"), findsWidgets);
+    expect(find.text("Kişisel"), findsOneWidget);
+    expect(find.text("Ortak"), findsOneWidget);
+    expect(find.text("Kalan Bütçe"), findsOneWidget);
+    expect(find.text("Gelir"), findsOneWidget);
+    expect(find.text("Kişisel Gider"), findsOneWidget);
+    expect(find.text("Ortak Gider Payın"), findsOneWidget);
+    expect(find.text("Bu Ay"), findsOneWidget);
+  });
+
   testWidgets("shows empty shared budget group state", (tester) async {
     await setLargeTestScreen(tester);
     await tester.pumpWidget(buildBudgetScreen());
