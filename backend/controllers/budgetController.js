@@ -36,6 +36,23 @@ const ensureBudgetSchema = () => {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (group_id, user_id)
       );
+
+      CREATE TABLE IF NOT EXISTS budget_transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(20) NOT NULL,
+        title VARCHAR(160) NOT NULL,
+        category VARCHAR(80) NOT NULL DEFAULT 'General',
+        amount NUMERIC(12, 2) NOT NULL,
+        transaction_date DATE NOT NULL,
+        note TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK (type IN ('income', 'expense')),
+        CHECK (amount > 0)
+      );
+
+      ALTER TABLE budget_transactions
+      ALTER COLUMN category SET DEFAULT 'General';
     `);
   }
 
@@ -130,6 +147,164 @@ const getBudgetGroups = async (req, res) => {
 
     return res.status(500).json({
       message: "Budget groups could not be loaded",
+    });
+  }
+};
+
+const isValidDateString = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && value === date.toISOString().slice(0, 10);
+};
+
+const getMonthRange = (month) => {
+  if (typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+    return null;
+  }
+
+  const [year, monthNumber] = month.split("-").map(Number);
+
+  if (monthNumber < 1 || monthNumber > 12) {
+    return null;
+  }
+
+  const start = `${month}-01`;
+  const nextMonthDate = new Date(Date.UTC(year, monthNumber, 1));
+  const nextYear = nextMonthDate.getUTCFullYear();
+  const nextMonth = String(nextMonthDate.getUTCMonth() + 1).padStart(2, "0");
+
+  return {
+    start,
+    end: `${nextYear}-${nextMonth}-01`,
+  };
+};
+
+const toNumber = (value) => Number(value || 0);
+
+const getPersonalTransactions = async (req, res) => {
+  try {
+    await ensureBudgetSchema();
+
+    const userId = req.user.userId;
+    const range = getMonthRange(req.query.month);
+
+    if (!range) {
+      return res.status(400).json({
+        message: "Valid month query parameter is required",
+      });
+    }
+
+    const summaryResult = await pool.query(
+      `
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0)::float AS income_total,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)::float AS expense_total
+      FROM budget_transactions
+      WHERE user_id = $1
+        AND transaction_date >= $2
+        AND transaction_date < $3
+      `,
+      [userId, range.start, range.end]
+    );
+
+    const transactionsResult = await pool.query(
+      `
+      SELECT
+        id,
+        type,
+        title,
+        amount::float AS amount,
+        transaction_date,
+        note
+      FROM budget_transactions
+      WHERE user_id = $1
+        AND transaction_date >= $2
+        AND transaction_date < $3
+      ORDER BY transaction_date DESC, id DESC
+      `,
+      [userId, range.start, range.end]
+    );
+
+    const incomeTotal = toNumber(summaryResult.rows[0]?.income_total);
+    const expenseTotal = toNumber(summaryResult.rows[0]?.expense_total);
+    const sharedExpenseTotal = 0;
+
+    return res.status(200).json({
+      summary: {
+        income_total: incomeTotal,
+        expense_total: expenseTotal,
+        shared_expense_total: sharedExpenseTotal,
+        remaining_balance: incomeTotal - expenseTotal - sharedExpenseTotal,
+      },
+      transactions: transactionsResult.rows,
+    });
+  } catch (err) {
+    console.error("GET PERSONAL BUDGET TRANSACTIONS ERROR:", err);
+
+    return res.status(500).json({
+      message: "Budget transactions could not be loaded",
+    });
+  }
+};
+
+const createPersonalTransaction = async (req, res) => {
+  try {
+    await ensureBudgetSchema();
+
+    const userId = req.user.userId;
+    const type = req.body.type?.trim();
+    const title = req.body.title?.trim();
+    const amount = Number(req.body.amount);
+    const transactionDate = req.body.transaction_date;
+    const note = req.body.note?.trim() || null;
+
+    if (!["income", "expense"].includes(type)) {
+      return res.status(400).json({
+        message: "Invalid transaction type",
+      });
+    }
+
+    if (!title || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        message: "Invalid transaction details",
+      });
+    }
+
+    if (!isValidDateString(transactionDate)) {
+      return res.status(400).json({
+        message: "Invalid transaction date",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      INSERT INTO budget_transactions
+        (user_id, type, title, amount, transaction_date, note)
+      VALUES
+        ($1, $2, $3, $4, $5, $6)
+      RETURNING
+        id,
+        type,
+        title,
+        amount::float AS amount,
+        transaction_date,
+        note
+      `,
+      [userId, type, title, amount, transactionDate, note]
+    );
+
+    return res.status(201).json({
+      message: "Budget transaction created successfully",
+      transaction: result.rows[0],
+    });
+  } catch (err) {
+    console.error("CREATE PERSONAL BUDGET TRANSACTION ERROR:", err);
+
+    return res.status(500).json({
+      message: "Budget transaction could not be created",
     });
   }
 };
@@ -263,6 +438,8 @@ const createBudgetGroup = async (req, res) => {
 
 module.exports = {
   getAcceptedFriends,
+  getPersonalTransactions,
+  createPersonalTransaction,
   getBudgetGroups,
   createBudgetGroup,
 };

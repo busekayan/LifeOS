@@ -72,6 +72,70 @@ class BudgetGroup {
   }
 }
 
+class BudgetSummary {
+  final double incomeTotal;
+  final double expenseTotal;
+  final double sharedExpenseTotal;
+  final double remainingBalance;
+
+  const BudgetSummary({
+    required this.incomeTotal,
+    required this.expenseTotal,
+    required this.sharedExpenseTotal,
+    required this.remainingBalance,
+  });
+
+  factory BudgetSummary.fromJson(Map<String, dynamic> json) {
+    double parseAmount(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? "") ?? 0;
+    }
+
+    return BudgetSummary(
+      incomeTotal: parseAmount(json["income_total"]),
+      expenseTotal: parseAmount(json["expense_total"]),
+      sharedExpenseTotal: parseAmount(json["shared_expense_total"]),
+      remainingBalance: parseAmount(json["remaining_balance"]),
+    );
+  }
+}
+
+class BudgetTransaction {
+  final int id;
+  final String type;
+  final String title;
+  final double amount;
+  final String transactionDate;
+  final String? note;
+
+  const BudgetTransaction({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.amount,
+    required this.transactionDate,
+    this.note,
+  });
+
+  factory BudgetTransaction.fromJson(Map<String, dynamic> json) {
+    final amountValue = json["amount"];
+
+    return BudgetTransaction(
+      id: json["id"] as int,
+      type: json["type"]?.toString() ?? "expense",
+      title: json["title"]?.toString() ?? "",
+      amount: amountValue is num
+          ? amountValue.toDouble()
+          : double.tryParse(amountValue?.toString() ?? "") ?? 0,
+      transactionDate:
+          json["transaction_date"]?.toString().split("T").first ?? "",
+      note: json["note"]?.toString(),
+    );
+  }
+
+  bool get isIncome => type == "income";
+}
+
 class BudgetScreen extends StatefulWidget {
   final HttpGet httpGet;
   final HttpPost httpPost;
@@ -95,6 +159,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   List<BudgetFriend> friends = [];
   List<BudgetGroup> groups = [];
+  BudgetSummary summary = const BudgetSummary(
+    incomeTotal: 0,
+    expenseTotal: 0,
+    sharedExpenseTotal: 0,
+    remainingBalance: 0,
+  );
+  List<BudgetTransaction> transactions = [];
 
   @override
   void initState() {
@@ -128,11 +199,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
         ApiConfig.uri("/budget/groups"),
         headers: headers,
       );
+      final transactionsResponse = await widget.httpGet(
+        ApiConfig.uri("/budget/transactions", {"month": currentMonthKey()}),
+        headers: headers,
+      );
 
       if (!mounted) return;
 
       if (friendsResponse.statusCode != 200 ||
-          groupsResponse.statusCode != 200) {
+          groupsResponse.statusCode != 200 ||
+          transactionsResponse.statusCode != 200) {
         setState(() {
           isLoading = false;
           errorMessage = "Bütçe bilgileri alınamadı.";
@@ -142,6 +218,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       final friendsData = jsonDecode(friendsResponse.body);
       final groupsData = jsonDecode(groupsResponse.body);
+      final transactionsData = jsonDecode(transactionsResponse.body);
 
       setState(() {
         friends = (friendsData["friends"] as List<dynamic>? ?? [])
@@ -152,6 +229,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
             .whereType<Map<String, dynamic>>()
             .map(BudgetGroup.fromJson)
             .toList();
+        summary = BudgetSummary.fromJson(
+          transactionsData["summary"] as Map<String, dynamic>? ?? {},
+        );
+        transactions =
+            (transactionsData["transactions"] as List<dynamic>? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .map(BudgetTransaction.fromJson)
+                .toList();
         isLoading = false;
         errorMessage = null;
       });
@@ -162,6 +247,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
         errorMessage = "Sunucu bağlantısı kurulamadı.";
       });
     }
+  }
+
+  String currentMonthKey() {
+    final now = DateTime.now();
+    return "${now.year}-${now.month.toString().padLeft(2, "0")}";
+  }
+
+  String currentDateKey() {
+    final now = DateTime.now();
+    return "${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")}";
+  }
+
+  String formatCurrency(double amount) {
+    final rounded = amount.round();
+    return "$rounded TL";
   }
 
   Future<void> showCreateGroupDialog() async {
@@ -305,6 +405,188 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
   }
 
+  Future<void> showCreateTransactionDialog(String initialType) async {
+    final titleController = TextEditingController();
+    final amountController = TextEditingController();
+    final dateController = TextEditingController(text: currentDateKey());
+    final noteController = TextEditingController();
+    String selectedType = initialType;
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(
+                selectedType == "income" ? "Gelir ekle" : "Gider ekle",
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: "income", label: Text("Gelir")),
+                        ButtonSegment(value: "expense", label: Text("Gider")),
+                      ],
+                      selected: {selectedType},
+                      onSelectionChanged: (value) {
+                        setDialogState(() {
+                          selectedType = value.first;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(labelText: "Başlık"),
+                    ),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "Tutar"),
+                    ),
+                    TextField(
+                      controller: dateController,
+                      decoration: const InputDecoration(
+                        labelText: "Tarih",
+                        hintText: "YYYY-AA-GG",
+                      ),
+                    ),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(
+                        labelText: "Not",
+                        hintText: "Opsiyonel",
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text("Vazgeç"),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final amount = double.tryParse(
+                      amountController.text.trim(),
+                    );
+                    final hasValidDate = RegExp(
+                      r"^\d{4}-\d{2}-\d{2}$",
+                    ).hasMatch(dateController.text.trim());
+
+                    if (titleController.text.trim().isEmpty ||
+                        amount == null ||
+                        amount <= 0 ||
+                        !hasValidDate) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("İşlem bilgilerini kontrol et."),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text("Kaydet"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (submitted == true) {
+      await createTransaction(
+        type: selectedType,
+        title: titleController.text.trim(),
+        amount: double.parse(amountController.text.trim()),
+        transactionDate: dateController.text.trim(),
+        note: noteController.text.trim(),
+      );
+    }
+  }
+
+  Future<void> createTransaction({
+    required String type,
+    required String title,
+    required double amount,
+    required String transactionDate,
+    required String note,
+  }) async {
+    try {
+      final accessToken = await widget.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        return;
+      }
+
+      final response = await widget.httpPost(
+        ApiConfig.uri("/budget/transactions"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+        body: jsonEncode({
+          "type": type,
+          "title": title,
+          "amount": amount,
+          "transaction_date": transactionDate,
+          "note": note.isEmpty ? null : note,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final transaction = BudgetTransaction.fromJson(
+          data["transaction"] as Map<String, dynamic>,
+        );
+
+        setState(() {
+          transactions.insert(0, transaction);
+          final incomeTotal =
+              summary.incomeTotal +
+              (transaction.isIncome ? transaction.amount : 0);
+          final expenseTotal =
+              summary.expenseTotal +
+              (transaction.isIncome ? 0 : transaction.amount);
+          summary = BudgetSummary(
+            incomeTotal: incomeTotal,
+            expenseTotal: expenseTotal,
+            sharedExpenseTotal: summary.sharedExpenseTotal,
+            remainingBalance:
+                incomeTotal - expenseTotal - summary.sharedExpenseTotal,
+          );
+        });
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("İşlem eklendi.")));
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("İşlem eklenemedi.")));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -411,20 +693,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
             color: const Color(0xFF222831),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 "Kalan Bütçe",
                 style: TextStyle(
                   color: Colors.white70,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Text(
-                "0 TL",
-                style: TextStyle(
+                formatCurrency(summary.remainingBalance),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 34,
                   fontWeight: FontWeight.w900,
@@ -439,7 +721,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             Expanded(
               child: buildSummaryMetric(
                 title: "Gelir",
-                amount: "0 TL",
+                amount: formatCurrency(summary.incomeTotal),
                 color: const Color(0xFF26A69A),
               ),
             ),
@@ -447,7 +729,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             Expanded(
               child: buildSummaryMetric(
                 title: "Kişisel Gider",
-                amount: "0 TL",
+                amount: formatCurrency(summary.expenseTotal),
                 color: const Color(0xFFE57373),
               ),
             ),
@@ -456,9 +738,31 @@ class _BudgetScreenState extends State<BudgetScreen> {
         const SizedBox(height: 10),
         buildSummaryMetric(
           title: "Ortak Gider Payın",
-          amount: "0 TL",
+          amount: formatCurrency(summary.sharedExpenseTotal),
           color: const Color(0xFFFFB86B),
           fullWidth: true,
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: buildTransactionButton(
+                label: "Gelir Ekle",
+                icon: Icons.trending_up_rounded,
+                color: const Color(0xFF26A69A),
+                onTap: () => showCreateTransactionDialog("income"),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: buildTransactionButton(
+                label: "Gider Ekle",
+                icon: Icons.trending_down_rounded,
+                color: const Color(0xFFE57373),
+                onTap: () => showCreateTransactionDialog("expense"),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 18),
         Container(
@@ -471,18 +775,21 @@ class _BudgetScreenState extends State<BudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "Bu Ay",
+                "Son İşlemler",
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
-              Text(
-                "Gelir, kişisel gider ve ortak gider payı bu alanda birlikte takip edilecek.",
-                style: TextStyle(
-                  color: Colors.black.withOpacity(0.55),
-                  height: 1.35,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              if (transactions.isEmpty)
+                Text(
+                  "Bu ay henüz gelir veya gider eklenmedi.",
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.55),
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                  ),
+                )
+              else
+                ...transactions.map(buildTransactionRow),
             ],
           ),
         ),
@@ -521,6 +828,107 @@ class _BudgetScreenState extends State<BudgetScreen> {
               color: color,
               fontSize: 20,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildTransactionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildTransactionRow(BudgetTransaction transaction) {
+    final color = transaction.isIncome
+        ? const Color(0xFF26A69A)
+        : const Color(0xFFE57373);
+    final prefix = transaction.isIncome ? "+" : "-";
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              transaction.isIncome
+                  ? Icons.arrow_downward_rounded
+                  : Icons.arrow_upward_rounded,
+              color: color,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  transaction.note == null || transaction.note!.trim().isEmpty
+                      ? transaction.transactionDate
+                      : "${transaction.transactionDate} • ${transaction.note}",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.48),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            "$prefix${formatCurrency(transaction.amount)}",
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
             ),
           ),
         ],

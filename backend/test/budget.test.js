@@ -58,6 +58,8 @@ require.cache[require.resolve("../config/db")] = { exports: mockPool };
 
 const {
   getAcceptedFriends,
+  getPersonalTransactions,
+  createPersonalTransaction,
   getBudgetGroups,
   createBudgetGroup,
 } = require("../controllers/budgetController");
@@ -80,9 +82,10 @@ const createResponse = () => {
   return res;
 };
 
-const authenticatedRequest = ({ body = {} } = {}) => ({
+const authenticatedRequest = ({ body = {}, query = {} } = {}) => ({
   user: { userId: 7 },
   body,
+  query,
 });
 
 describe("budget group APIs", () => {
@@ -148,6 +151,133 @@ describe("budget group APIs", () => {
     assert.deepEqual(groupsQuery.params, [7]);
     assert.equal(res.body.groups[0].name, "Ev Arkadaşları");
     assert.equal(res.body.groups[0].members.length, 2);
+  });
+
+  it("lists monthly personal transactions with summary", async () => {
+    mockPool.queue.push({
+      rows: [{ income_total: 5000, expense_total: 1200 }],
+    });
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 4,
+          type: "expense",
+          title: "Market",
+          amount: 450,
+          transaction_date: "2026-06-12",
+          note: "Weekly groceries",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({ query: { month: "2026-06" } });
+    const res = createResponse();
+
+    await getPersonalTransactions(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.summary, {
+      income_total: 5000,
+      expense_total: 1200,
+      shared_expense_total: 0,
+      remaining_balance: 3800,
+    });
+    assert.equal(res.body.transactions.length, 1);
+    assert.equal(res.body.transactions[0].title, "Market");
+    assert.deepEqual(mockPool.queries.at(-2).params, [
+      7,
+      "2026-06-01",
+      "2026-07-01",
+    ]);
+  });
+
+  it("creates a personal income transaction", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 8,
+          type: "income",
+          title: "Salary",
+          amount: 5000,
+          transaction_date: "2026-06-01",
+          note: null,
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      body: {
+        type: "income",
+        title: "Salary",
+        amount: 5000,
+        transaction_date: "2026-06-01",
+      },
+    });
+    const res = createResponse();
+
+    await createPersonalTransaction(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.message, "Budget transaction created successfully");
+    assert.equal(res.body.transaction.type, "income");
+    assert.match(mockPool.queries.at(-1).sql, /INSERT INTO budget_transactions/i);
+    assert.deepEqual(mockPool.queries.at(-1).params, [
+      7,
+      "income",
+      "Salary",
+      5000,
+      "2026-06-01",
+      null,
+    ]);
+  });
+
+  it("creates a personal expense transaction", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          id: 9,
+          type: "expense",
+          title: "Coffee",
+          amount: 95,
+          transaction_date: "2026-06-13",
+          note: "Latte",
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      body: {
+        type: "expense",
+        title: "Coffee",
+        amount: 95,
+        transaction_date: "2026-06-13",
+        note: "Latte",
+      },
+    });
+    const res = createResponse();
+
+    await createPersonalTransaction(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.transaction.type, "expense");
+    assert.equal(res.body.transaction.title, "Coffee");
+  });
+
+  it("rejects invalid personal transaction input", async () => {
+    const req = authenticatedRequest({
+      body: {
+        type: "expense",
+        title: "",
+        amount: -1,
+        transaction_date: "2026-06-13",
+      },
+    });
+    const res = createResponse();
+
+    await createPersonalTransaction(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "Invalid transaction details");
   });
 
   it("creates a shared budget group with accepted friends", async () => {
