@@ -171,6 +171,50 @@ void main() {
     expect(find.byIcon(Icons.check_rounded), findsWidgets);
   });
 
+  testWidgets("opens template preview with habit details", (tester) async {
+    await setLargeTestScreen(tester);
+    await tester.pumpWidget(buildDiscoveryScreen());
+    await tester.pumpAndSettle();
+
+    await scrollToText(tester, "Derin Odaklanma");
+    await tester.tap(find.text("Derin Odaklanma"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Derin Odaklanma"), findsWidgets);
+    expect(find.text("Derin Odaklanma description"), findsOneWidget);
+    expect(find.text("Productivity"), findsWidgets);
+    expect(find.text("4 alışkanlık içeriyor"), findsWidgets);
+    expect(find.text("First habit"), findsOneWidget);
+    expect(find.text("Second habit"), findsOneWidget);
+    expect(find.text("Bu planı ekle"), findsOneWidget);
+  });
+
+  testWidgets("adds a template from preview", (tester) async {
+    await setLargeTestScreen(tester);
+    Uri? postedUrl;
+
+    await tester.pumpWidget(
+      buildDiscoveryScreen(
+        httpPost:
+            (Uri url, {Map<String, String>? headers, Object? body}) async {
+              postedUrl = url;
+              return jsonResponse({"addedCount": 4}, 201);
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await scrollToText(tester, "Derin Odaklanma");
+    await tester.tap(find.text("Derin Odaklanma"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Bu planı ekle"));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(postedUrl.toString(), contains("/habit-templates/2/add"));
+    expect(find.text("4 alışkanlık listene eklendi!"), findsOneWidget);
+  });
+
   testWidgets("shows already-added template state", (tester) async {
     await setLargeTestScreen(tester);
     Uri? postedUrl;
@@ -192,6 +236,33 @@ void main() {
     expect(find.byIcon(Icons.check_rounded), findsWidgets);
 
     await tester.tap(find.byIcon(Icons.check_rounded).last);
+    await tester.pumpAndSettle();
+
+    expect(postedUrl, isNull);
+  });
+
+  testWidgets("shows already-added state in template preview", (tester) async {
+    await setLargeTestScreen(tester);
+    Uri? postedUrl;
+
+    await tester.pumpWidget(
+      buildDiscoveryScreen(
+        httpPost:
+            (Uri url, {Map<String, String>? headers, Object? body}) async {
+              postedUrl = url;
+              return jsonResponse({"addedCount": 3}, 201);
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await scrollToText(tester, "Huzurlu Akşamlar");
+    await tester.tap(find.text("Huzurlu Akşamlar"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Listende"), findsOneWidget);
+
+    await tester.tap(find.text("Listende"));
     await tester.pumpAndSettle();
 
     expect(postedUrl, isNull);

@@ -310,6 +310,25 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
     }
   }
 
+  Future<void> _showTemplatePreview(HabitTemplate template) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _TemplatePreviewSheet(
+          template: template,
+          isAdded: _addedTemplates.contains(template.id),
+          isLoading: _loadingTemplates.contains(template.id),
+          onAdd: () async {
+            Navigator.pop(sheetContext);
+            await _addTemplate(template);
+          },
+        );
+      },
+    );
+  }
+
   void _showSuccessToast(int addedCount) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -548,6 +567,8 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
                 ),
                 isAdded: _addedTemplates.contains(_featuredTemplates[index].id),
                 onAdd: () => _addTemplate(_featuredTemplates[index]),
+                onPreview: () =>
+                    _showTemplatePreview(_featuredTemplates[index]),
               ),
             ),
           ),
@@ -597,6 +618,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
           loadingIds: _loadingTemplates,
           addedIds: _addedTemplates,
           onAdd: _addTemplate,
+          onPreview: _showTemplatePreview,
           cardColor: getCardColor(),
           textColor: getPrimaryTextColor(),
         );
@@ -614,121 +636,151 @@ class _FeaturedTemplateCard extends StatelessWidget {
   final bool isLoading;
   final bool isAdded;
   final VoidCallback onAdd;
+  final VoidCallback onPreview;
 
   const _FeaturedTemplateCard({
     required this.template,
     required this.isLoading,
     required this.isAdded,
     required this.onAdd,
+    required this.onPreview,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: template.categoryColor.withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.network(
-                template.imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Container(color: template.categoryColor.withOpacity(0.15)),
-              ),
+    return GestureDetector(
+      onTap: onPreview,
+      child: Container(
+        width: 200,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: template.categoryColor.withOpacity(0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
-                    stops: const [0.3, 1.0],
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Image.network(
+                  template.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: template.categoryColor.withOpacity(0.15),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: template.categoryColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(template.categoryIcon, size: 12, color: Colors.white),
-                    const SizedBox(width: 4),
-                    Text(
-                      template.category,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.8),
+                      ],
+                      stops: const [0.3, 1.0],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      template.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: template.categoryColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        template.categoryIcon,
+                        size: 12,
                         color: Colors.white,
-                        height: 1.2,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${template.habitCount} alışkanlık',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.75),
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(width: 4),
+                      Text(
+                        template.category,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _AddButton(
-                      isLoading: isLoading,
-                      isAdded: isAdded,
-                      onAdd: onAdd,
-                      compact: true,
-                      accentColor: template.categoryColor,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.32),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.visibility_outlined,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        template.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${template.habitCount} alışkanlık',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.75),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _AddButton(
+                        isLoading: isLoading,
+                        isAdded: isAdded,
+                        onAdd: onAdd,
+                        compact: true,
+                        accentColor: template.categoryColor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -745,6 +797,7 @@ class _CategorySection extends StatelessWidget {
   final Set<String> loadingIds;
   final Set<String> addedIds;
   final Function(HabitTemplate) onAdd;
+  final Function(HabitTemplate) onPreview;
   final Color cardColor;
   final Color textColor;
 
@@ -754,6 +807,7 @@ class _CategorySection extends StatelessWidget {
     required this.loadingIds,
     required this.addedIds,
     required this.onAdd,
+    required this.onPreview,
     required this.cardColor,
     required this.textColor,
   });
@@ -800,6 +854,7 @@ class _CategorySection extends StatelessWidget {
                 isLoading: loadingIds.contains(t.id),
                 isAdded: addedIds.contains(t.id),
                 onAdd: () => onAdd(t),
+                onPreview: () => onPreview(t),
                 cardColor: cardColor,
                 textColor: textColor,
               ),
@@ -820,6 +875,7 @@ class _ListTemplateCard extends StatelessWidget {
   final bool isLoading;
   final bool isAdded;
   final VoidCallback onAdd;
+  final VoidCallback onPreview;
   final Color cardColor;
   final Color textColor;
 
@@ -828,107 +884,335 @@ class _ListTemplateCard extends StatelessWidget {
     required this.isLoading,
     required this.isAdded,
     required this.onAdd,
+    required this.onPreview,
     required this.cardColor,
     required this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.horizontal(
-              left: Radius.circular(26),
+    return GestureDetector(
+      onTap: onPreview,
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: SizedBox(
-              width: 90,
-              height: 90,
-              child: Image.network(
-                template.imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: template.categoryColor.withOpacity(0.15),
-                  child: Icon(
-                    template.categoryIcon,
-                    color: template.categoryColor,
-                    size: 28,
+          ],
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(26),
+              ),
+              child: SizedBox(
+                width: 90,
+                height: 90,
+                child: Image.network(
+                  template.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: template.categoryColor.withOpacity(0.15),
+                    child: Icon(
+                      template.categoryIcon,
+                      color: template.categoryColor,
+                      size: 28,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: template.categoryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        template.category,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: template.categoryColor,
+                        ),
+                      ),
                     ),
-                    decoration: BoxDecoration(
-                      color: template.categoryColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      template.category,
+                    const SizedBox(height: 5),
+                    Text(
+                      template.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: template.categoryColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${template.habitCount} alışkanlık içeriyor',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor.withOpacity(0.5),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: _AddButton(
+                isLoading: isLoading,
+                isAdded: isAdded,
+                onAdd: onAdd,
+                compact: false,
+                accentColor: template.categoryColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// TEMPLATE PREVIEW SHEET
+// ─────────────────────────────────────────────
+
+class _TemplatePreviewSheet extends StatelessWidget {
+  final HabitTemplate template;
+  final bool isAdded;
+  final bool isLoading;
+  final Future<void> Function() onAdd;
+
+  const _TemplatePreviewSheet({
+    required this.template,
+    required this.isAdded,
+    required this.isLoading,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final maxHeight = MediaQuery.of(context).size.height * 0.82;
+
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFFCFA),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: template.categoryColor.withOpacity(0.16),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                template.categoryIcon,
+                                color: template.categoryColor,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    template.category,
+                                    style: TextStyle(
+                                      color: template.categoryColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    template.title,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          template.description,
+                          style: TextStyle(
+                            color: Colors.black.withOpacity(0.62),
+                            fontSize: 14,
+                            height: 1.45,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          "${template.habitCount} alışkanlık içeriyor",
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ...template.habits.asMap().entries.map((entry) {
+                          final index = entry.key + 1;
+                          final habit = entry.value;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(13),
+                            decoration: BoxDecoration(
+                              color: template.categoryColor.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: template.categoryColor.withOpacity(0.16),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 26,
+                                  height: 26,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: template.categoryColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    "$index",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Text(
+                                    habit,
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.fromLTRB(22, 12, 22, bottomPadding + 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFCFA),
+                    border: Border(
+                      top: BorderSide(color: Colors.black.withOpacity(0.06)),
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: isAdded || isLoading ? null : onAdd,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isAdded
+                            ? const Color(0xFF26A69A)
+                            : template.categoryColor,
+                        disabledBackgroundColor: const Color(0xFF26A69A),
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: isLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              isAdded ? Icons.check_rounded : Icons.add_rounded,
+                            ),
+                      label: Text(
+                        isAdded ? "Listende" : "Bu planı ekle",
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    template.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${template.habitCount} alışkanlık içeriyor',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: textColor.withOpacity(0.5),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: _AddButton(
-              isLoading: isLoading,
-              isAdded: isAdded,
-              onAdd: onAdd,
-              compact: false,
-              accentColor: template.categoryColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
