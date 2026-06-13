@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'config/api_config.dart';
 import 'navigation/no_transition_page_route.dart';
+import 'screens/budget_screen.dart';
 import 'screens/diary_screen.dart';
 import 'screens/discovery_screen.dart';
 import 'screens/home_screen.dart';
@@ -37,6 +38,10 @@ class MyApp extends StatelessWidget {
           case "/daily":
             return NoTransitionPageRoute(
               builder: (context) => const DailyScreen(),
+            );
+          case "/budget":
+            return NoTransitionPageRoute(
+              builder: (context) => const BudgetScreen(),
             );
         }
 

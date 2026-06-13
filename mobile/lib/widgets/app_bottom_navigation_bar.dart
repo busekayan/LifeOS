@@ -26,7 +26,7 @@ class AppBottomNavigationBar extends StatelessWidget {
         Navigator.pushReplacementNamed(context, "/daily");
         break;
       case 3:
-        _showComingSoon(context, "Bütçe");
+        Navigator.pushReplacementNamed(context, "/budget");
         break;
       case 4:
         _showComingSoon(context, "Profil");

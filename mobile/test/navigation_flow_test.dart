@@ -139,6 +139,7 @@ void main() {
           "/home": (context) => const TestPage(title: "Home route"),
           "/explore": (context) => const TestPage(title: "Explore route"),
           "/daily": (context) => const TestPage(title: "Daily route"),
+          "/budget": (context) => const TestPage(title: "Budget route"),
         },
         home: const Scaffold(
           body: Text("Current page"),
@@ -152,6 +153,28 @@ void main() {
     expect(find.text("Daily route"), findsOneWidget);
   });
 
+  testWidgets("bottom navigation opens budget route", (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          "/home": (context) => const TestPage(title: "Home route"),
+          "/explore": (context) => const TestPage(title: "Explore route"),
+          "/daily": (context) => const TestPage(title: "Daily route"),
+          "/budget": (context) => const TestPage(title: "Budget route"),
+        },
+        home: const Scaffold(
+          body: Text("Current page"),
+          bottomNavigationBar: AppBottomNavigationBar(currentIndex: 0),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text("Bütçe"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Budget route"), findsOneWidget);
+  });
+
   testWidgets("bottom navigation shows placeholder for unavailable sections", (
     tester,
   ) async {
@@ -161,6 +184,7 @@ void main() {
           "/home": (context) => const TestPage(title: "Home route"),
           "/explore": (context) => const TestPage(title: "Explore route"),
           "/daily": (context) => const TestPage(title: "Daily route"),
+          "/budget": (context) => const TestPage(title: "Budget route"),
         },
         home: const Scaffold(
           body: Text("Current page"),
@@ -171,9 +195,9 @@ void main() {
 
     expect(find.text("Araçlar"), findsNothing);
 
-    await tester.tap(find.text("Bütçe"));
+    await tester.tap(find.text("Profil"));
     await tester.pump();
-    expect(find.text("Bütçe ekranı yakında eklenecek."), findsOneWidget);
+    expect(find.text("Profil ekranı yakında eklenecek."), findsOneWidget);
   });
 
   testWidgets("protected screen shows an error without token", (tester) async {
