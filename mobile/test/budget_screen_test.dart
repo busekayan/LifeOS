@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -197,7 +198,30 @@ Future<void> setLargeTestScreen(WidgetTester tester) async {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+Future<void> setSmallTestScreen(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(360, 760);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
+  testWidgets("shows loading state while budget data is loading", (
+    tester,
+  ) async {
+    final pendingResponse = Completer<http.Response>();
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) =>
+            pendingResponse.future,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
   testWidgets("shows personal budget summary layout", (tester) async {
     await setLargeTestScreen(tester);
     await tester.pumpWidget(buildBudgetScreen());
@@ -265,6 +289,79 @@ void main() {
     expect(find.text("Market"), findsOneWidget);
     expect(find.text("+5000 TL"), findsOneWidget);
     expect(find.text("-450 TL"), findsOneWidget);
+  });
+
+  testWidgets("keeps long names and large amounts readable on a small screen", (
+    tester,
+  ) async {
+    await setSmallTestScreen(tester);
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path.endsWith("/friends")) {
+            return jsonResponse({
+              "friends": [
+                friendJson(
+                  id: 12,
+                  firstName: "CokUzunIsimliArkadas",
+                  email: "uzunarkadas@example.com",
+                ),
+              ],
+            }, 200);
+          }
+          if (url.path.endsWith("/friend-invitations")) {
+            return jsonResponse({"invitations": []}, 200);
+          }
+          if (url.path.endsWith("/transactions")) {
+            return jsonResponse(
+              transactionsBody(
+                incomeTotal: 987654321,
+                expenseTotal: 123456789,
+                sharedExpenseTotal: 22222222,
+                transactions: [
+                  transactionJson(
+                    id: 2,
+                    type: "expense",
+                    title: "Cok uzun market alisverisi ve ev ihtiyaclari",
+                    amount: 123456789,
+                  ),
+                ],
+              ),
+              200,
+            );
+          }
+          return jsonResponse({
+            "groups": [
+              groupJson(
+                id: 1,
+                name: "Cok uzun ortak butce grubu adi",
+                expenses: [
+                  sharedExpenseJson(
+                    id: 8,
+                    title: "Cok uzun ortak gider basligi",
+                    amount: 22222222,
+                  ),
+                ],
+              ),
+            ],
+          }, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("841975310 TL"), findsOneWidget);
+    expect(find.text("-123456789 TL"), findsOneWidget);
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Kabul edilmiş arkadaşlar"), findsOneWidget);
+    expect(find.textContaining("CokUzunIsimliArkadas"), findsOneWidget);
+    expect(find.text("22222222 TL"), findsWidgets);
   });
 
   testWidgets("adds an income transaction", (tester) async {
@@ -654,6 +751,82 @@ void main() {
 
     expect(jsonDecode(postedBody as String), {"email": "ece@example.com"});
     expect(find.text("Arkadaş daveti gönderildi."), findsOneWidget);
+  });
+
+  testWidgets("shows accepted and pending friend states clearly", (
+    tester,
+  ) async {
+    await setLargeTestScreen(tester);
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path.endsWith("/friends")) {
+            return jsonResponse({
+              "friends": [
+                friendJson(id: 12, firstName: "Ece", email: "ece@example.com"),
+              ],
+            }, 200);
+          }
+          if (url.path.endsWith("/friend-invitations")) {
+            return jsonResponse({
+              "invitations": [
+                invitationJson(
+                  id: 3,
+                  requesterId: 14,
+                  firstName: "Ada",
+                  email: "ada@example.com",
+                ),
+              ],
+            }, 200);
+          }
+          if (url.path.endsWith("/transactions")) {
+            return jsonResponse(transactionsBody(), 200);
+          }
+          return jsonResponse({"groups": []}, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Gelen davetler (1)"), findsOneWidget);
+    expect(find.text("Kabul edilmiş arkadaşlar"), findsOneWidget);
+    expect(find.text("Ece Test"), findsOneWidget);
+    expect(find.text("Ada Test"), findsOneWidget);
+  });
+
+  testWidgets("shows pending friend invitation duplicate message", (
+    tester,
+  ) async {
+    await setLargeTestScreen(tester);
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpPost:
+            (Uri url, {Map<String, String>? headers, Object? body}) async {
+              return jsonResponse({
+                "message": "Friend invitation is already pending",
+              }, 409);
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Davet Gönder"));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), "ece@example.com");
+    await tester.tap(find.text("Gönder"));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text("Bu kişiye gönderilmiş bekleyen davet var."),
+      findsOneWidget,
+    );
   });
 
   testWidgets("accepts an incoming friend invitation", (tester) async {

@@ -476,6 +476,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return "$rounded TL";
   }
 
+  String invitationErrorMessage(String message) {
+    if (message == "Friend invitation is already pending") {
+      return "Bu kişiye gönderilmiş bekleyen davet var.";
+    }
+
+    if (message == "User is already your friend") {
+      return "Bu kişi zaten arkadaşların arasında.";
+    }
+
+    return "Arkadaş daveti gönderilemedi.";
+  }
+
   double sharedGroupTotal(BudgetGroup group) {
     return group.expenses.fold<double>(
       0,
@@ -1194,9 +1206,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Arkadaş daveti gönderilemedi.")),
-      );
+      var message = "Arkadaş daveti gönderilemedi.";
+      try {
+        final data = jsonDecode(response.body);
+        message = invitationErrorMessage(data["message"]?.toString() ?? "");
+      } catch (_) {
+        // Keep the fallback message when the server returns a non-JSON error.
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1563,12 +1583,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                formatCurrency(summary.remainingBalance),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 34,
-                  fontWeight: FontWeight.w900,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatCurrency(summary.remainingBalance),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
@@ -1681,12 +1705,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            amount,
-            style: TextStyle(
-              color: color,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              amount,
+              maxLines: 1,
+              style: TextStyle(
+                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
@@ -1713,11 +1742,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
           children: [
             Icon(icon, color: Colors.white, size: 18),
             const SizedBox(width: 7),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
             ),
           ],
@@ -1782,12 +1817,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            "$prefix${formatCurrency(transaction.amount)}",
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w900,
-              fontSize: 14,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 112),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                "$prefix${formatCurrency(transaction.amount)}",
+                maxLines: 1,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                ),
+              ),
             ),
           ),
         ],
@@ -1994,29 +2037,45 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       ),
                     ),
                   )
-                : Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: friends.map((friend) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Kabul edilmiş arkadaşlar",
+                        style: TextStyle(
+                          color: Colors.black.withOpacity(0.56),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          friend.displayName,
-                          style: const TextStyle(
-                            color: Color(0xFF4F46E5),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                      ),
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: friends.map((friend) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              friend.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF4F46E5),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ),
           ),
         ],
@@ -2196,12 +2255,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  formatCurrency(total),
-                  style: const TextStyle(
-                    color: Color(0xFF6C63FF),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 96),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      formatCurrency(total),
+                      maxLines: 1,
+                      style: const TextStyle(
+                        color: Color(0xFF6C63FF),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -2404,6 +2471,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       ),
                       child: Text(
                         "${settlement.from.displayName}, ${settlement.to.displayName} kişisine ${formatCurrency(settlement.amount)} ödemeli",
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Color(0xFF4F46E5),
@@ -2573,12 +2642,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            formatCurrency(expense.amount),
-            style: const TextStyle(
-              color: Color(0xFF6C63FF),
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 96),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatCurrency(expense.amount),
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Color(0xFF6C63FF),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
         ],
