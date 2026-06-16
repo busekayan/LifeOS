@@ -8,11 +8,13 @@ const budgetRoutes = require("./routes/budgetRoutes");
 const moodRoutes = require("./routes/moodRoutes");
 const questionRoutes = require("./routes/questionRoutes");
 const diaryRoutes = require("./routes/diaryRoutes");
+const docsRoutes = require("./routes/docsRoutes");
 
 const app = express();
 
 app.use(express.json());
 
+app.use("/", docsRoutes);
 app.use("/users", userRoutes);
 app.use("/habits", habitRoutes);
 app.use("/habit-logs", habitLogRoutes);
