@@ -65,6 +65,7 @@ const {
   createPersonalTransaction,
   getBudgetGroups,
   createBudgetGroup,
+  createSharedExpense,
 } = require("../controllers/budgetController");
 const verifyToken = require("../middleware/verifyToken");
 
@@ -361,6 +362,9 @@ describe("budget group APIs", () => {
       rows: [{ income_total: 5000, expense_total: 1200 }],
     });
     mockPool.queue.push({
+      rows: [{ shared_expense_total: 300 }],
+    });
+    mockPool.queue.push({
       rows: [
         {
           id: 4,
@@ -382,12 +386,18 @@ describe("budget group APIs", () => {
     assert.deepEqual(res.body.summary, {
       income_total: 5000,
       expense_total: 1200,
-      shared_expense_total: 0,
-      remaining_balance: 3800,
+      shared_expense_total: 300,
+      remaining_balance: 3500,
     });
     assert.equal(res.body.transactions.length, 1);
     assert.equal(res.body.transactions[0].title, "Market");
+    assert.match(mockPool.queries.at(-2).sql, /budget_group_expense_participants/i);
     assert.deepEqual(mockPool.queries.at(-2).params, [
+      7,
+      "2026-06-01",
+      "2026-07-01",
+    ]);
+    assert.deepEqual(mockPool.queries.at(-1).params, [
       7,
       "2026-06-01",
       "2026-07-01",
@@ -529,6 +539,177 @@ describe("budget group APIs", () => {
     assert.deepEqual(mockClient.queries[3].params, [3, 7]);
     assert.deepEqual(mockClient.queries[4].params, [3, 12]);
     assert.deepEqual(mockClient.queries[5].params, [3, 13]);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("creates a shared expense split between selected participants", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({
+      rows: [{ user_id: 7 }, { user_id: 12 }, { user_id: 13 }],
+    });
+    mockClient.queue.push({
+      rows: [
+        {
+          id: 20,
+          group_id: 3,
+          title: "Market",
+          amount: 300,
+          paid_by: 7,
+          expense_date: "2026-06-13",
+        },
+      ],
+    });
+    mockClient.queue.push({ rows: [] }); // participant 7
+    mockClient.queue.push({ rows: [] }); // participant 13
+    mockClient.queue.push({
+      rows: [
+        {
+          id: 20,
+          title: "Market",
+          amount: 300,
+          expense_date: "2026-06-13",
+          paid_by_user: {
+            id: 7,
+            first_name: "Buse",
+            last_name: "Kayan",
+            email: "buse@example.com",
+          },
+          participants: [
+            {
+              id: 7,
+              first_name: "Buse",
+              last_name: "Kayan",
+              email: "buse@example.com",
+              share_amount: 150,
+            },
+            {
+              id: 13,
+              first_name: "Ada",
+              last_name: "Demir",
+              email: "ada@example.com",
+              share_amount: 150,
+            },
+          ],
+        },
+      ],
+    });
+    mockClient.queue.push({ rows: [] }); // COMMIT
+
+    const req = authenticatedRequest({
+      params: { groupId: "3" },
+      body: {
+        title: "Market",
+        amount: 300,
+        expense_date: "2026-06-13",
+        participant_ids: [7, 13],
+      },
+    });
+    const res = createResponse();
+
+    await createSharedExpense(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.message, "Shared expense created successfully");
+    assert.equal(res.body.expense.title, "Market");
+    assert.equal(res.body.expense.participants[0].share_amount, 150);
+    assert.match(mockClient.queries[1].sql, /budget_group_members/i);
+    assert.deepEqual(mockClient.queries[1].params, [3, 7]);
+    assert.match(mockClient.queries[2].sql, /INSERT INTO budget_group_expenses/i);
+    assert.deepEqual(mockClient.queries[2].params, [
+      3,
+      "Market",
+      300,
+      7,
+      "2026-06-13",
+      7,
+    ]);
+    assert.deepEqual(mockClient.queries[3].params, [20, 7, 150]);
+    assert.deepEqual(mockClient.queries[4].params, [20, 13, 150]);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("rejects shared expenses for groups the user does not belong to", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [] });
+    mockClient.queue.push({ rows: [] }); // ROLLBACK
+
+    const req = authenticatedRequest({
+      params: { groupId: "99" },
+      body: {
+        title: "Market",
+        amount: 300,
+        expense_date: "2026-06-13",
+        participant_ids: [7],
+      },
+    });
+    const res = createResponse();
+
+    await createSharedExpense(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.message, "You can only add expenses to your own groups");
+    assert.match(mockClient.queries[2].sql, /ROLLBACK/i);
+    assert.equal(mockClient.released, true);
+  });
+
+  it("rejects invalid shared expense input", async () => {
+    const req = authenticatedRequest({
+      params: { groupId: "3" },
+      body: {
+        title: "",
+        amount: 0,
+        expense_date: "2026-06-13",
+      },
+    });
+    const res = createResponse();
+
+    await createSharedExpense(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "Invalid expense details");
+    assert.equal(mockClient.released, true);
+  });
+
+  it("rejects shared expenses without selected participants", async () => {
+    const req = authenticatedRequest({
+      params: { groupId: "3" },
+      body: {
+        title: "Market",
+        amount: 300,
+        expense_date: "2026-06-13",
+        participant_ids: [],
+      },
+    });
+    const res = createResponse();
+
+    await createSharedExpense(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "At least one participant must be selected");
+    assert.equal(mockClient.released, true);
+  });
+
+  it("rejects shared expense participants outside the group", async () => {
+    mockClient.queue.push({ rows: [] }); // BEGIN
+    mockClient.queue.push({ rows: [{ user_id: 7 }, { user_id: 12 }] });
+    mockClient.queue.push({ rows: [] }); // ROLLBACK
+
+    const req = authenticatedRequest({
+      params: { groupId: "3" },
+      body: {
+        title: "Market",
+        amount: 300,
+        expense_date: "2026-06-13",
+        participant_ids: [7, 99],
+      },
+    });
+    const res = createResponse();
+
+    await createSharedExpense(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.message, "Participants must belong to the group");
+    assert.match(mockClient.queries[2].sql, /ROLLBACK/i);
     assert.equal(mockClient.released, true);
   });
 

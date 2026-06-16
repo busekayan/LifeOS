@@ -10,6 +10,7 @@ const {
   createPersonalTransaction,
   getBudgetGroups,
   createBudgetGroup,
+  createSharedExpense,
 } = require("../controllers/budgetController");
 const verifyToken = require("../middleware/verifyToken");
 
@@ -25,5 +26,6 @@ router.get("/transactions", verifyToken, getPersonalTransactions);
 router.post("/transactions", verifyToken, createPersonalTransaction);
 router.get("/groups", verifyToken, getBudgetGroups);
 router.post("/groups", verifyToken, createBudgetGroup);
+router.post("/groups/:groupId/expenses", verifyToken, createSharedExpense);
 
 module.exports = router;

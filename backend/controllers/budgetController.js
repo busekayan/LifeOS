@@ -53,7 +53,32 @@ const ensureBudgetSchema = () => {
 
       ALTER TABLE budget_transactions
       ALTER COLUMN category SET DEFAULT 'General';
-    `);
+
+      CREATE TABLE IF NOT EXISTS budget_group_expenses (
+        id SERIAL PRIMARY KEY,
+        group_id INTEGER NOT NULL REFERENCES budget_groups(id) ON DELETE CASCADE,
+        title VARCHAR(160) NOT NULL,
+        amount NUMERIC(12, 2) NOT NULL,
+        paid_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expense_date DATE NOT NULL,
+        created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK (amount > 0)
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_group_expense_participants (
+        id SERIAL PRIMARY KEY,
+        expense_id INTEGER NOT NULL REFERENCES budget_group_expenses(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        share_amount NUMERIC(12, 2) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (expense_id, user_id),
+        CHECK (share_amount >= 0)
+      );
+    `).catch((err) => {
+      budgetSchemaReadyPromise = undefined;
+      throw err;
+    });
   }
 
   return budgetSchemaReadyPromise;
@@ -313,7 +338,50 @@ const getBudgetGroups = async (req, res) => {
               u.last_name ASC
           ) FILTER (WHERE u.id IS NOT NULL),
           '[]'
-        ) AS members
+        ) AS members,
+        COALESCE(
+          (
+            SELECT json_agg(expense_payload ORDER BY expense_payload.expense_date DESC, expense_payload.id DESC)
+            FROM (
+              SELECT
+                bge.id,
+                bge.title,
+                bge.amount::float AS amount,
+                bge.expense_date,
+                bge.created_at,
+                json_build_object(
+                  'id', payer.id,
+                  'first_name', payer.first_name,
+                  'last_name', payer.last_name,
+                  'email', payer.email
+                ) AS paid_by_user,
+                COALESCE(
+                  (
+                    SELECT json_agg(
+                      json_build_object(
+                        'id', participant_user.id,
+                        'first_name', participant_user.first_name,
+                        'last_name', participant_user.last_name,
+                        'email', participant_user.email,
+                        'share_amount', bgep.share_amount::float
+                      )
+                      ORDER BY participant_user.first_name ASC, participant_user.last_name ASC
+                    )
+                    FROM budget_group_expense_participants bgep
+                    JOIN users participant_user
+                      ON participant_user.id = bgep.user_id
+                    WHERE bgep.expense_id = bge.id
+                  ),
+                  '[]'
+                ) AS participants
+              FROM budget_group_expenses bge
+              JOIN users payer
+                ON payer.id = bge.paid_by
+              WHERE bge.group_id = bg.id
+            ) expense_payload
+          ),
+          '[]'
+        ) AS expenses
       FROM budget_groups bg
       JOIN budget_group_members current_member
         ON current_member.group_id = bg.id
@@ -399,6 +467,23 @@ const getPersonalTransactions = async (req, res) => {
       [userId, range.start, range.end]
     );
 
+    const sharedExpenseResult = await pool.query(
+      `
+      SELECT
+        COALESCE(SUM(bgep.share_amount), 0)::float AS shared_expense_total
+      FROM budget_group_expense_participants bgep
+      JOIN budget_group_expenses bge
+        ON bge.id = bgep.expense_id
+      JOIN budget_group_members bgm
+        ON bgm.group_id = bge.group_id
+        AND bgm.user_id = bgep.user_id
+      WHERE bgep.user_id = $1
+        AND bge.expense_date >= $2
+        AND bge.expense_date < $3
+      `,
+      [userId, range.start, range.end]
+    );
+
     const transactionsResult = await pool.query(
       `
       SELECT
@@ -419,7 +504,9 @@ const getPersonalTransactions = async (req, res) => {
 
     const incomeTotal = toNumber(summaryResult.rows[0]?.income_total);
     const expenseTotal = toNumber(summaryResult.rows[0]?.expense_total);
-    const sharedExpenseTotal = 0;
+    const sharedExpenseTotal = toNumber(
+      sharedExpenseResult.rows[0]?.shared_expense_total
+    );
 
     return res.status(200).json({
       summary: {
@@ -495,6 +582,183 @@ const createPersonalTransaction = async (req, res) => {
     return res.status(500).json({
       message: "Budget transaction could not be created",
     });
+  }
+};
+
+const createSharedExpense = async (req, res) => {
+  await ensureBudgetSchema();
+
+  const client = await pool.connect();
+
+  try {
+    const userId = req.user.userId;
+    const groupId = Number(req.params.groupId);
+    const title = req.body.title?.trim();
+    const amount = Number(req.body.amount);
+    const paidBy = userId;
+    const expenseDate = req.body.expense_date;
+    const participantIds = Array.isArray(req.body.participant_ids)
+      ? req.body.participant_ids.map(Number)
+      : [];
+
+    if (!Number.isInteger(groupId) || groupId <= 0) {
+      return res.status(400).json({
+        message: "Invalid group id",
+      });
+    }
+
+    if (!title || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        message: "Invalid expense details",
+      });
+    }
+
+    if (!isValidDateString(expenseDate)) {
+      return res.status(400).json({
+        message: "Invalid expense date",
+      });
+    }
+
+    if (
+      !Array.isArray(req.body.participant_ids) ||
+      participantIds.length === 0 ||
+      participantIds.some((participantId) => !Number.isInteger(participantId))
+    ) {
+      return res.status(400).json({
+        message: "At least one participant must be selected",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const membersResult = await client.query(
+      `
+      SELECT user_id
+      FROM budget_group_members
+      WHERE group_id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM budget_group_members current_member
+          WHERE current_member.group_id = $1
+            AND current_member.user_id = $2
+        )
+      `,
+      [groupId, userId]
+    );
+
+    if (membersResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        message: "You can only add expenses to your own groups",
+      });
+    }
+
+    const groupMemberIds = new Set(
+      membersResult.rows.map((row) => Number(row.user_id))
+    );
+    const uniqueParticipantIds = [...new Set(participantIds)];
+    const payerIsMember = groupMemberIds.has(paidBy);
+
+    if (!payerIsMember) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        message: "Payer must belong to the group",
+      });
+    }
+
+    const participantsAreMembers = uniqueParticipantIds.every((participantId) =>
+      groupMemberIds.has(participantId)
+    );
+
+    if (!participantsAreMembers) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        message: "Participants must belong to the group",
+      });
+    }
+
+    const expenseResult = await client.query(
+      `
+      INSERT INTO budget_group_expenses
+        (group_id, title, amount, paid_by, expense_date, created_by)
+      VALUES
+        ($1, $2, $3, $4, $5, $6)
+      RETURNING id, group_id, title, amount::float AS amount, paid_by, expense_date, created_at
+      `,
+      [groupId, title, amount, paidBy, expenseDate, userId]
+    );
+
+    const expense = expenseResult.rows[0];
+    const shareAmount = Number((amount / uniqueParticipantIds.length).toFixed(2));
+
+    for (const participantId of uniqueParticipantIds) {
+      await client.query(
+        `
+        INSERT INTO budget_group_expense_participants
+          (expense_id, user_id, share_amount)
+        VALUES
+          ($1, $2, $3)
+        `,
+        [expense.id, participantId, shareAmount]
+      );
+    }
+
+    const expenseDetailsResult = await client.query(
+      `
+      SELECT
+        bge.id,
+        bge.title,
+        bge.amount::float AS amount,
+        bge.expense_date,
+        bge.created_at,
+        json_build_object(
+          'id', payer.id,
+          'first_name', payer.first_name,
+          'last_name', payer.last_name,
+          'email', payer.email
+        ) AS paid_by_user,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', participant_user.id,
+              'first_name', participant_user.first_name,
+              'last_name', participant_user.last_name,
+              'email', participant_user.email,
+              'share_amount', bgep.share_amount::float
+            )
+            ORDER BY participant_user.first_name ASC, participant_user.last_name ASC
+          ) FILTER (WHERE participant_user.id IS NOT NULL),
+          '[]'
+        ) AS participants
+      FROM budget_group_expenses bge
+      JOIN users payer
+        ON payer.id = bge.paid_by
+      LEFT JOIN budget_group_expense_participants bgep
+        ON bgep.expense_id = bge.id
+      LEFT JOIN users participant_user
+        ON participant_user.id = bgep.user_id
+      WHERE bge.id = $1
+      GROUP BY bge.id, payer.id
+      `,
+      [expense.id]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(201).json({
+      message: "Shared expense created successfully",
+      expense: expenseDetailsResult.rows[0],
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+
+    console.error("CREATE SHARED EXPENSE ERROR:", err);
+
+    return res.status(500).json({
+      message: "Shared expense could not be created",
+    });
+  } finally {
+    client.release();
   }
 };
 
@@ -634,4 +898,5 @@ module.exports = {
   createPersonalTransaction,
   getBudgetGroups,
   createBudgetGroup,
+  createSharedExpense,
 };

@@ -26,7 +26,11 @@ Map<String, Object?> friendJson({
   };
 }
 
-Map<String, Object?> groupJson({required int id, required String name}) {
+Map<String, Object?> groupJson({
+  required int id,
+  required String name,
+  Object? expenses = const <Map<String, Object?>>[],
+}) {
   return {
     "id": id,
     "name": name,
@@ -34,6 +38,35 @@ Map<String, Object?> groupJson({required int id, required String name}) {
       friendJson(id: 7, firstName: "Buse", email: "buse@example.com"),
       friendJson(id: 12, firstName: "Ece", email: "ece@example.com"),
     ],
+    "expenses": expenses,
+  };
+}
+
+Map<String, Object?> sharedExpenseJson({
+  required int id,
+  required String title,
+  required int amount,
+  List<int> participantIds = const [7, 12],
+}) {
+  Map<String, Object?> participantJson(int participantId) {
+    final friend = participantId == 12
+        ? friendJson(id: 12, firstName: "Ece", email: "ece@example.com")
+        : friendJson(id: 7, firstName: "Buse", email: "buse@example.com");
+
+    return {...friend, "share_amount": amount / participantIds.length};
+  }
+
+  return {
+    "id": id,
+    "title": title,
+    "amount": amount,
+    "expense_date": "2026-06-13",
+    "paid_by_user": friendJson(
+      id: 7,
+      firstName: "Buse",
+      email: "buse@example.com",
+    ),
+    "participants": participantIds.map(participantJson).toList(),
   };
 }
 
@@ -158,6 +191,7 @@ void main() {
               transactionsBody(
                 incomeTotal: 5000,
                 expenseTotal: 1200,
+                sharedExpenseTotal: 300,
                 transactions: [
                   transactionJson(
                     id: 1,
@@ -182,9 +216,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text("3800 TL"), findsOneWidget);
+    expect(find.text("3500 TL"), findsOneWidget);
     expect(find.text("5000 TL"), findsOneWidget);
     expect(find.text("1200 TL"), findsOneWidget);
+    expect(find.text("300 TL"), findsOneWidget);
     expect(find.text("Maaş"), findsOneWidget);
     expect(find.text("Market"), findsOneWidget);
     expect(find.text("+5000 TL"), findsOneWidget);
@@ -323,7 +358,9 @@ void main() {
             return jsonResponse(transactionsBody(), 200);
           }
           return jsonResponse({
-            "groups": [groupJson(id: 1, name: "Ev Arkadaşları")],
+            "groups": [
+              groupJson(id: 1, name: "Ev Arkadaşları", expenses: null),
+            ],
           }, 200);
         },
       ),
@@ -334,8 +371,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Ev Arkadaşları"), findsOneWidget);
-    expect(find.text("Buse Test"), findsOneWidget);
-    expect(find.text("Ece Test"), findsOneWidget);
+
+    await tester.tap(find.text("Ev Arkadaşları"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Bu grupta henüz ortak gider yok."), findsOneWidget);
+  });
+
+  testWidgets("renders shared group expenses", (tester) async {
+    await setLargeTestScreen(tester);
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path.endsWith("/friends")) {
+            return jsonResponse({"friends": []}, 200);
+          }
+          if (url.path.endsWith("/friend-invitations")) {
+            return jsonResponse({"invitations": []}, 200);
+          }
+          if (url.path.endsWith("/transactions")) {
+            return jsonResponse(transactionsBody(), 200);
+          }
+          return jsonResponse({
+            "groups": [
+              groupJson(
+                id: 1,
+                name: "Ev Arkadaşları",
+                expenses: [
+                  sharedExpenseJson(id: 8, title: "Market", amount: 300),
+                ],
+              ),
+            ],
+          }, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Ev Arkadaşları"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Market"), findsOneWidget);
+    expect(find.text("300 TL"), findsWidgets);
+    expect(find.textContaining("Buse Test ödedi"), findsOneWidget);
+    expect(find.text("Borç Durumu"), findsOneWidget);
+    expect(
+      find.textContaining("Ece Test, Buse Test kişisine 150 TL ödemeli"),
+      findsOneWidget,
+    );
   });
 
   testWidgets("creates a shared budget group with selected friends", (
@@ -389,6 +475,114 @@ void main() {
     });
     expect(find.text("Ortak bütçe grubu oluşturuldu."), findsOneWidget);
     expect(find.text("Ev Arkadaşları"), findsOneWidget);
+  });
+
+  testWidgets("adds a shared expense to a group", (tester) async {
+    await setLargeTestScreen(tester);
+    Object? postedBody;
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path.endsWith("/friends")) {
+            return jsonResponse({"friends": []}, 200);
+          }
+          if (url.path.endsWith("/friend-invitations")) {
+            return jsonResponse({"invitations": []}, 200);
+          }
+          if (url.path.endsWith("/transactions")) {
+            return jsonResponse(transactionsBody(), 200);
+          }
+          return jsonResponse({
+            "groups": [groupJson(id: 1, name: "Ev Arkadaşları")],
+          }, 200);
+        },
+        httpPost:
+            (Uri url, {Map<String, String>? headers, Object? body}) async {
+              postedBody = body;
+              return jsonResponse({
+                "expense": sharedExpenseJson(
+                  id: 9,
+                  title: "Market",
+                  amount: 300,
+                  participantIds: [7],
+                ),
+              }, 201);
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Ev Arkadaşları"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Gider Ekle"));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), "Market");
+    await tester.enterText(fields.at(1), "300");
+    await tester.tap(find.widgetWithText(CheckboxListTile, "Ece Test"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Kaydet"));
+    await tester.pumpAndSettle();
+
+    final body = jsonDecode(postedBody as String);
+    expect(body["title"], "Market");
+    expect(body["amount"], 300);
+    expect(body.containsKey("paid_by"), false);
+    expect(body["participant_ids"], [7]);
+    expect(find.text("Ortak gider eklendi."), findsOneWidget);
+    expect(find.text("300 TL"), findsOneWidget);
+
+    await tester.tap(find.text("Kişisel"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("-300 TL"), findsOneWidget);
+    expect(find.text("300 TL"), findsWidgets);
+  });
+
+  testWidgets("validates shared expense form fields", (tester) async {
+    await setLargeTestScreen(tester);
+    Object? postedBody;
+
+    await tester.pumpWidget(
+      buildBudgetScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path.endsWith("/friends")) {
+            return jsonResponse({"friends": []}, 200);
+          }
+          if (url.path.endsWith("/friend-invitations")) {
+            return jsonResponse({"invitations": []}, 200);
+          }
+          if (url.path.endsWith("/transactions")) {
+            return jsonResponse(transactionsBody(), 200);
+          }
+          return jsonResponse({
+            "groups": [groupJson(id: 1, name: "Ev Arkadaşları")],
+          }, 200);
+        },
+        httpPost:
+            (Uri url, {Map<String, String>? headers, Object? body}) async {
+              postedBody = body;
+              return jsonResponse({}, 201);
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Ortak"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Ev Arkadaşları"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Gider Ekle"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Kaydet"));
+    await tester.pumpAndSettle();
+
+    expect(postedBody, isNull);
+    expect(find.text("Gider bilgilerini kontrol et."), findsOneWidget);
   });
 
   testWidgets("sends a friend invitation by email", (tester) async {
