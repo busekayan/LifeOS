@@ -11,6 +11,49 @@ typedef HttpGet =
     Future<http.Response> Function(Uri url, {Map<String, String>? headers});
 typedef GetAccessToken = Future<String?> Function();
 typedef ClearTokens = Future<void> Function();
+typedef CurrentDate = DateTime Function();
+
+const Map<String, String> moodLabels = {
+  "mutlu": "Mutlu",
+  "sakin": "Sakin",
+  "enerjik": "Enerjik",
+  "uzgun": "Üzgün",
+  "stresli": "Stresli",
+  "yorgun": "Yorgun",
+};
+
+const Map<String, Color> moodColors = {
+  "mutlu": Color(0xFFFFC857),
+  "sakin": Color(0xFF5BC0BE),
+  "enerjik": Color(0xFFFF7A59),
+  "uzgun": Color(0xFF6C8AE4),
+  "stresli": Color(0xFFE76F9A),
+  "yorgun": Color(0xFF8D99AE),
+};
+
+const List<String> weekdayLabels = [
+  "Pzt",
+  "Sal",
+  "Çar",
+  "Per",
+  "Cum",
+  "Cmt",
+  "Paz",
+];
+const List<String> monthLabels = [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık",
+];
 
 class ProfileUser {
   final int id;
@@ -40,16 +83,36 @@ class ProfileUser {
   }
 }
 
+class MoodEntry {
+  final String mood;
+  final DateTime date;
+
+  const MoodEntry({required this.mood, required this.date});
+
+  factory MoodEntry.fromJson(Map<String, dynamic> json) {
+    return MoodEntry(
+      mood: json["mood"]?.toString() ?? "",
+      date: DateTime.parse(json["log_date"].toString()),
+    );
+  }
+
+  String get dateKey => formatDateKey(date);
+  String get label => moodLabels[mood] ?? mood;
+  Color get color => moodColors[mood] ?? const Color(0xFFB8B8C8);
+}
+
 class ProfileScreen extends StatefulWidget {
   final HttpGet httpGet;
   final GetAccessToken getAccessToken;
   final ClearTokens clearTokens;
+  final CurrentDate currentDate;
 
   const ProfileScreen({
     super.key,
     this.httpGet = http.get,
     this.getAccessToken = TokenStorage.getAccessToken,
     this.clearTokens = TokenStorage.clearTokens,
+    this.currentDate = DateTime.now,
   });
 
   @override
@@ -58,12 +121,19 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool isLoading = true;
+  bool isMoodCalendarLoading = false;
   String? errorMessage;
+  String? moodCalendarError;
   ProfileUser? user;
+  DateTime viewedMonth = DateTime.now();
+  Map<String, MoodEntry> monthlyMoods = {};
+  MoodEntry? selectedMood;
 
   @override
   void initState() {
     super.initState();
+    final today = widget.currentDate();
+    viewedMonth = DateTime(today.year, today.month);
     fetchProfile();
   }
 
@@ -111,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         isLoading = false;
         errorMessage = null;
       });
+      await fetchMonthlyMoods(accessToken);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -118,6 +189,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
         errorMessage = "Sunucu bağlantısı kurulamadı.";
       });
     }
+  }
+
+  Future<void> fetchMonthlyMoods(String accessToken) async {
+    setState(() {
+      isMoodCalendarLoading = true;
+      moodCalendarError = null;
+      selectedMood = null;
+    });
+
+    try {
+      final response = await widget.httpGet(
+        ApiConfig.uri("/moods/month", {
+          "year": viewedMonth.year.toString(),
+          "month": viewedMonth.month.toString(),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        setState(() {
+          isMoodCalendarLoading = false;
+          moodCalendarError = "Mood takvimi yüklenemedi.";
+        });
+        return;
+      }
+
+      final data = jsonDecode(response.body);
+      final moods = (data["moods"] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(MoodEntry.fromJson);
+
+      setState(() {
+        monthlyMoods = {for (final mood in moods) mood.dateKey: mood};
+        isMoodCalendarLoading = false;
+        moodCalendarError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isMoodCalendarLoading = false;
+        moodCalendarError = "Mood takvimi yüklenemedi.";
+      });
+    }
+  }
+
+  Future<void> changeMonth(int offset) async {
+    final accessToken = await widget.getAccessToken();
+
+    if (accessToken == null || accessToken.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        moodCalendarError = "Oturum bulunamadı.";
+      });
+      return;
+    }
+
+    setState(() {
+      viewedMonth = DateTime(viewedMonth.year, viewedMonth.month + offset);
+    });
+    await fetchMonthlyMoods(accessToken);
   }
 
   Future<void> logout() async {
@@ -265,12 +401,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        buildProfilePlaceholder(
-          icon: Icons.calendar_month_rounded,
-          title: "Mood takvimi",
-          description:
-              "Geçmiş günlerdeki ruh hali renklerini burada göreceksin.",
-        ),
+        buildMoodCalendar(),
         buildProfilePlaceholder(
           icon: Icons.menu_book_rounded,
           title: "Günlük geçmişi",
@@ -284,6 +415,277 @@ class _ProfileScreenState extends State<ProfileScreen> {
               "Tamamlama oranların ve haftalık ilerlemen burada olacak.",
         ),
       ],
+    );
+  }
+
+  Widget buildMoodCalendar() {
+    final daysInMonth = DateTime(
+      viewedMonth.year,
+      viewedMonth.month + 1,
+      0,
+    ).day;
+    final firstWeekday = DateTime(
+      viewedMonth.year,
+      viewedMonth.month,
+      1,
+    ).weekday;
+    final leadingEmptyDays = firstWeekday - 1;
+    final totalCells = leadingEmptyDays + daysInMonth;
+    final trailingEmptyDays = (7 - totalCells % 7) % 7;
+    final today = widget.currentDate();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF5BC0BE).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: Color(0xFF168A88),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Mood takvimi",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      "${monthLabels[viewedMonth.month - 1]} ${viewedMonth.year}",
+                      style: TextStyle(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: "Önceki ay",
+                onPressed: isMoodCalendarLoading ? null : () => changeMonth(-1),
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              IconButton(
+                tooltip: "Sonraki ay",
+                onPressed: isMoodCalendarLoading ? null : () => changeMonth(1),
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final calendarWidth = constraints.maxWidth < 252
+                  ? constraints.maxWidth
+                  : 252.0;
+
+              return Center(
+                child: SizedBox(
+                  width: calendarWidth,
+                  child: Column(
+                    children: [
+                      Row(
+                        children: weekdayLabels
+                            .map(
+                              (label) => Expanded(
+                                child: Center(
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.48,
+                                      ),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 6),
+                      if (isMoodCalendarLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else
+                        GridView.count(
+                          crossAxisCount: 7,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 4,
+                          crossAxisSpacing: 4,
+                          childAspectRatio: 1,
+                          children: [
+                            for (var i = 0; i < leadingEmptyDays; i++)
+                              const SizedBox.shrink(),
+                            for (var day = 1; day <= daysInMonth; day++)
+                              buildMoodDay(
+                                DateTime(
+                                  viewedMonth.year,
+                                  viewedMonth.month,
+                                  day,
+                                ),
+                                today,
+                              ),
+                            for (var i = 0; i < trailingEmptyDays; i++)
+                              const SizedBox.shrink(),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          if (!isMoodCalendarLoading) ...[
+            const SizedBox(height: 10),
+            if (moodCalendarError != null)
+              Text(
+                moodCalendarError!,
+                style: const TextStyle(
+                  color: Color(0xFFC84C4C),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              )
+            else if (monthlyMoods.isEmpty)
+              Text(
+                "Bu ay için mood kaydı yok.",
+                style: TextStyle(
+                  color: Colors.black.withValues(alpha: 0.52),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
+            else if (selectedMood != null)
+              buildMoodSummary(selectedMood!)
+            else
+              Text(
+                "Renkli günlere dokunarak mood detayını görebilirsin.",
+                style: TextStyle(
+                  color: Colors.black.withValues(alpha: 0.52),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget buildMoodDay(DateTime date, DateTime today) {
+    final mood = monthlyMoods[formatDateKey(date)];
+    final isToday = isSameDate(date, today);
+    final isSelected = selectedMood?.dateKey == formatDateKey(date);
+    final moodColor = mood?.color;
+
+    return Semantics(
+      button: mood != null,
+      label: mood == null
+          ? "${date.day}. gün mood kaydı yok"
+          : "${date.day}. gün ${mood.label}",
+      child: InkWell(
+        key: ValueKey("mood-day-${formatDateKey(date)}"),
+        borderRadius: BorderRadius.circular(12),
+        onTap: mood == null
+            ? null
+            : () {
+                setState(() {
+                  selectedMood = mood;
+                });
+              },
+        child: Container(
+          decoration: BoxDecoration(
+            color:
+                moodColor?.withValues(alpha: 0.86) ?? const Color(0xFFF4F1FA),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF222831)
+                  : isToday
+                  ? const Color(0xFF6C63FF)
+                  : Colors.transparent,
+              width: isSelected ? 2 : 1.6,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            date.day.toString(),
+            style: TextStyle(
+              color: mood == null
+                  ? Colors.black.withValues(alpha: 0.46)
+                  : Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildMoodSummary(MoodEntry mood) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: mood.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: mood.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "${mood.date.day} ${monthLabels[mood.date.month - 1]}: ${mood.label}",
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -339,4 +741,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+String formatDateKey(DateTime date) {
+  return "${date.year.toString().padLeft(4, "0")}-"
+      "${date.month.toString().padLeft(2, "0")}-"
+      "${date.day.toString().padLeft(2, "0")}";
+}
+
+bool isSameDate(DateTime first, DateTime second) {
+  return first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
 }

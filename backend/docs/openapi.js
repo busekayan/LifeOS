@@ -736,6 +736,63 @@ const openApiSpec = {
         },
       },
     },
+    "/moods/month": {
+      get: {
+        tags: ["Mood"],
+        summary: "List mood entries for a month",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            in: "query",
+            name: "year",
+            required: true,
+            schema: { type: "integer", example: 2026 },
+          },
+          {
+            in: "query",
+            name: "month",
+            required: true,
+            schema: { type: "integer", minimum: 1, maximum: 12, example: 6 },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Monthly mood entries",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    moods: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          mood: {
+                            type: "string",
+                            enum: [
+                              "mutlu",
+                              "sakin",
+                              "enerjik",
+                              "uzgun",
+                              "stresli",
+                              "yorgun",
+                            ],
+                          },
+                          log_date: { type: "string", format: "date" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: "#/components/responses/ValidationError" },
+          401: { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/diaries": {
       get: {
         tags: ["Diary"],

@@ -92,7 +92,65 @@ const getMood = async (req, res) => {
   }
 };
 
+const formatDate = (value) => {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return value?.toString().slice(0, 10);
+};
+
+const getMonthlyMoods = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+
+    if (!Number.isInteger(year) || !Number.isInteger(month)) {
+      return res.status(400).json({
+        message: "year and month are required",
+      });
+    }
+
+    if (year < 2000 || year > 2100 || month < 1 || month > 12) {
+      return res.status(400).json({
+        message: "invalid year or month",
+      });
+    }
+
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const endDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+
+    const result = await pool.query(
+      `
+      SELECT mood, log_date
+      FROM mood_logs
+      WHERE user_id=$1
+      AND log_date >= $2
+      AND log_date < $3
+      ORDER BY log_date ASC
+      `,
+      [userId, startDate, endDate]
+    );
+
+    return res.status(200).json({
+      moods: result.rows.map((row) => ({
+        mood: row.mood,
+        log_date: formatDate(row.log_date),
+      })),
+    });
+  } catch (err) {
+    console.error("GET MONTHLY MOODS ERROR:", err);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   upsertMood,
   getMood,
+  getMonthlyMoods,
 };
