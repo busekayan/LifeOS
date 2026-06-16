@@ -11,6 +11,7 @@ import 'screens/diary_screen.dart';
 import 'screens/discovery_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/profile_screen.dart';
 import 'services/token_storage.dart';
 
 void main() {
@@ -46,6 +47,10 @@ class MyApp extends StatelessWidget {
           case "/budget":
             return NoTransitionPageRoute(
               builder: (context) => const BudgetScreen(),
+            );
+          case "/profile":
+            return NoTransitionPageRoute(
+              builder: (context) => const ProfileScreen(),
             );
         }
 

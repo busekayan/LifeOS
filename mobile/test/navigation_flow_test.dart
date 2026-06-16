@@ -175,9 +175,7 @@ void main() {
     expect(find.text("Budget route"), findsOneWidget);
   });
 
-  testWidgets("bottom navigation opens login route from profile", (
-    tester,
-  ) async {
+  testWidgets("bottom navigation opens profile route", (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         routes: {
@@ -185,7 +183,7 @@ void main() {
           "/explore": (context) => const TestPage(title: "Explore route"),
           "/daily": (context) => const TestPage(title: "Daily route"),
           "/budget": (context) => const TestPage(title: "Budget route"),
-          "/login": (context) => const TestPage(title: "Login route"),
+          "/profile": (context) => const TestPage(title: "Profile route"),
         },
         home: const Scaffold(
           body: Text("Current page"),
@@ -199,7 +197,7 @@ void main() {
     await tester.tap(find.text("Profil"));
     await tester.pumpAndSettle();
 
-    expect(find.text("Login route"), findsOneWidget);
+    expect(find.text("Profile route"), findsOneWidget);
   });
 
   testWidgets("protected screen shows an error without token", (tester) async {
