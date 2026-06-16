@@ -335,8 +335,48 @@ describe("budget group APIs", () => {
           name: "Ev Arkadaşları",
           created_by: 7,
           members: [
-            { id: 7, first_name: "Buse", last_name: "Kayan" },
-            { id: 12, first_name: "Ece", last_name: "Yilmaz" },
+            {
+              id: 7,
+              first_name: "Buse",
+              last_name: "Kayan",
+              email: "buse@example.com",
+            },
+            {
+              id: 12,
+              first_name: "Ece",
+              last_name: "Yilmaz",
+              email: "ece@example.com",
+            },
+          ],
+          expenses: [
+            {
+              id: 20,
+              title: "Market",
+              amount: 300,
+              expense_date: "2026-06-13",
+              paid_by_user: {
+                id: 7,
+                first_name: "Buse",
+                last_name: "Kayan",
+                email: "buse@example.com",
+              },
+              participants: [
+                {
+                  id: 7,
+                  first_name: "Buse",
+                  last_name: "Kayan",
+                  email: "buse@example.com",
+                  share_amount: 150,
+                },
+                {
+                  id: 12,
+                  first_name: "Ece",
+                  last_name: "Yilmaz",
+                  email: "ece@example.com",
+                  share_amount: 150,
+                },
+              ],
+            },
           ],
         },
       ],
@@ -355,6 +395,43 @@ describe("budget group APIs", () => {
     assert.deepEqual(groupsQuery.params, [7]);
     assert.equal(res.body.groups[0].name, "Ev Arkadaşları");
     assert.equal(res.body.groups[0].members.length, 2);
+    assert.deepEqual(res.body.groups[0].settlement_summary.members, [
+      {
+        id: 7,
+        first_name: "Buse",
+        last_name: "Kayan",
+        email: "buse@example.com",
+        paid_amount: 300,
+        owed_share: 150,
+        balance: 150,
+      },
+      {
+        id: 12,
+        first_name: "Ece",
+        last_name: "Yilmaz",
+        email: "ece@example.com",
+        paid_amount: 0,
+        owed_share: 150,
+        balance: -150,
+      },
+    ]);
+    assert.deepEqual(res.body.groups[0].settlement_summary.settlements, [
+      {
+        from_user: {
+          id: 12,
+          first_name: "Ece",
+          last_name: "Yilmaz",
+          email: "ece@example.com",
+        },
+        to_user: {
+          id: 7,
+          first_name: "Buse",
+          last_name: "Kayan",
+          email: "buse@example.com",
+        },
+        amount: 150,
+      },
+    ]);
   });
 
   it("lists monthly personal transactions with summary", async () => {

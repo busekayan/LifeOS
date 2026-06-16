@@ -83,17 +83,20 @@ class BudgetGroup {
   final String name;
   final List<BudgetFriend> members;
   final List<SharedExpense> expenses;
+  final SettlementSummary? settlementSummary;
 
   const BudgetGroup({
     required this.id,
     required this.name,
     required this.members,
     this.expenses = const <SharedExpense>[],
+    this.settlementSummary,
   });
 
   factory BudgetGroup.fromJson(Map<String, dynamic> json) {
     final membersJson = json["members"];
     final expensesJson = json["expenses"];
+    final settlementSummaryJson = json["settlement_summary"];
 
     return BudgetGroup(
       id: json["id"] as int,
@@ -110,6 +113,9 @@ class BudgetGroup {
                 .map(SharedExpense.fromJson)
                 .toList()
           : <SharedExpense>[],
+      settlementSummary: settlementSummaryJson is Map<String, dynamic>
+          ? SettlementSummary.fromJson(settlementSummaryJson)
+          : null,
     );
   }
 }
@@ -207,6 +213,70 @@ class DebtSettlement {
   });
 }
 
+class SettlementMemberSummary {
+  final BudgetFriend member;
+  final double paidAmount;
+  final double owedShare;
+  final double balance;
+
+  const SettlementMemberSummary({
+    required this.member,
+    required this.paidAmount,
+    required this.owedShare,
+    required this.balance,
+  });
+
+  factory SettlementMemberSummary.fromJson(Map<String, dynamic> json) {
+    return SettlementMemberSummary(
+      member: BudgetFriend.fromJson(json),
+      paidAmount: parseJsonAmount(json["paid_amount"]),
+      owedShare: parseJsonAmount(json["owed_share"]),
+      balance: parseJsonAmount(json["balance"]),
+    );
+  }
+}
+
+class SettlementSummary {
+  final List<SettlementMemberSummary> members;
+  final List<DebtSettlement> settlements;
+
+  const SettlementSummary({required this.members, required this.settlements});
+
+  factory SettlementSummary.fromJson(Map<String, dynamic> json) {
+    final membersJson = json["members"];
+    final settlementsJson = json["settlements"];
+
+    return SettlementSummary(
+      members: membersJson is List
+          ? membersJson
+                .whereType<Map<String, dynamic>>()
+                .map(SettlementMemberSummary.fromJson)
+                .toList()
+          : <SettlementMemberSummary>[],
+      settlements: settlementsJson is List
+          ? settlementsJson.whereType<Map<String, dynamic>>().map((
+              settlementJson,
+            ) {
+              return DebtSettlement(
+                from: BudgetFriend.fromJson(
+                  settlementJson["from_user"] as Map<String, dynamic>? ?? {},
+                ),
+                to: BudgetFriend.fromJson(
+                  settlementJson["to_user"] as Map<String, dynamic>? ?? {},
+                ),
+                amount: parseJsonAmount(settlementJson["amount"]),
+              );
+            }).toList()
+          : <DebtSettlement>[],
+    );
+  }
+}
+
+double parseJsonAmount(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? "") ?? 0;
+}
+
 class BudgetSummary {
   final double incomeTotal;
   final double expenseTotal;
@@ -221,16 +291,11 @@ class BudgetSummary {
   });
 
   factory BudgetSummary.fromJson(Map<String, dynamic> json) {
-    double parseAmount(dynamic value) {
-      if (value is num) return value.toDouble();
-      return double.tryParse(value?.toString() ?? "") ?? 0;
-    }
-
     return BudgetSummary(
-      incomeTotal: parseAmount(json["income_total"]),
-      expenseTotal: parseAmount(json["expense_total"]),
-      sharedExpenseTotal: parseAmount(json["shared_expense_total"]),
-      remainingBalance: parseAmount(json["remaining_balance"]),
+      incomeTotal: parseJsonAmount(json["income_total"]),
+      expenseTotal: parseJsonAmount(json["expense_total"]),
+      sharedExpenseTotal: parseJsonAmount(json["shared_expense_total"]),
+      remainingBalance: parseJsonAmount(json["remaining_balance"]),
     );
   }
 }
@@ -487,6 +552,52 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
 
     return settlements;
+  }
+
+  List<SettlementMemberSummary> calculateSettlementMemberSummaries(
+    BudgetGroup group,
+  ) {
+    final paidAmounts = <int, double>{};
+    final owedShares = <int, double>{};
+    final memberById = <int, BudgetFriend>{
+      for (final member in group.members) member.id: member,
+    };
+
+    for (final member in group.members) {
+      paidAmounts[member.id] = 0;
+      owedShares[member.id] = 0;
+    }
+
+    for (final expense in group.expenses) {
+      paidAmounts[expense.paidByUser.id] =
+          (paidAmounts[expense.paidByUser.id] ?? 0) + expense.amount;
+      memberById[expense.paidByUser.id] = expense.paidByUser;
+
+      for (final participant in expense.participants) {
+        owedShares[participant.id] =
+            (owedShares[participant.id] ?? 0) + participant.shareAmount;
+        memberById[participant.id] = BudgetFriend(
+          id: participant.id,
+          firstName: participant.firstName,
+          lastName: participant.lastName,
+          email: participant.email,
+        );
+      }
+    }
+
+    final summaries = memberById.entries.map((entry) {
+      final paidAmount = paidAmounts[entry.key] ?? 0;
+      final owedShare = owedShares[entry.key] ?? 0;
+
+      return SettlementMemberSummary(
+        member: entry.value,
+        paidAmount: paidAmount,
+        owedShare: owedShare,
+        balance: paidAmount - owedShare,
+      );
+    }).toList()..sort((a, b) => a.member.id.compareTo(b.member.id));
+
+    return summaries;
   }
 
   Future<void> showCreateGroupDialog() async {
@@ -957,6 +1068,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
             name: currentGroup.name,
             members: currentGroup.members,
             expenses: [expense, ...currentGroup.expenses],
+            settlementSummary: null,
           );
 
           if (expense.expenseDate.startsWith(currentMonthKey())) {
@@ -2207,7 +2319,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Widget buildGroupSettlementsSection(BudgetGroup group) {
-    final settlements = calculateSettlements(group);
+    final settlementSummary = group.settlementSummary;
+    final settlements =
+        settlementSummary?.settlements ?? calculateSettlements(group);
+    final memberSummaries =
+        settlementSummary?.members ?? calculateSettlementMemberSummaries(group);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2223,6 +2339,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 10),
+          if (memberSummaries.isNotEmpty) ...[
+            ...memberSummaries.map(buildSettlementMemberSummaryRow),
+            const SizedBox(height: 8),
+          ],
           if (group.expenses.isEmpty)
             Text(
               "Gider eklenince kimin kime ne kadar borçlu olduğu burada görünecek.",
@@ -2295,6 +2415,43 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 ),
               );
             }),
+        ],
+      ),
+    );
+  }
+
+  Widget buildSettlementMemberSummaryRow(SettlementMemberSummary summary) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F2FF),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              summary.member.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              "Ödedi ${formatCurrency(summary.paidAmount)} • Payı ${formatCurrency(summary.owedShare)}",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: Colors.black.withOpacity(0.56),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );

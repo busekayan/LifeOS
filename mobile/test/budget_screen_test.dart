@@ -30,6 +30,7 @@ Map<String, Object?> groupJson({
   required int id,
   required String name,
   Object? expenses = const <Map<String, Object?>>[],
+  Object? settlementSummary,
 }) {
   return {
     "id": id,
@@ -39,6 +40,7 @@ Map<String, Object?> groupJson({
       friendJson(id: 12, firstName: "Ece", email: "ece@example.com"),
     ],
     "expenses": expenses,
+    "settlement_summary": settlementSummary,
   };
 }
 
@@ -67,6 +69,45 @@ Map<String, Object?> sharedExpenseJson({
       email: "buse@example.com",
     ),
     "participants": participantIds.map(participantJson).toList(),
+  };
+}
+
+Map<String, Object?> settlementSummaryJson({
+  int amount = 150,
+  int paidAmount = 300,
+  int payerOwedShare = 150,
+  int participantOwedShare = 150,
+}) {
+  return {
+    "members": [
+      {
+        ...friendJson(id: 7, firstName: "Buse", email: "buse@example.com"),
+        "paid_amount": paidAmount,
+        "owed_share": payerOwedShare,
+        "balance": paidAmount - payerOwedShare,
+      },
+      {
+        ...friendJson(id: 12, firstName: "Ece", email: "ece@example.com"),
+        "paid_amount": 0,
+        "owed_share": participantOwedShare,
+        "balance": -participantOwedShare,
+      },
+    ],
+    "settlements": [
+      {
+        "from_user": friendJson(
+          id: 12,
+          firstName: "Ece",
+          email: "ece@example.com",
+        ),
+        "to_user": friendJson(
+          id: 7,
+          firstName: "Buse",
+          email: "buse@example.com",
+        ),
+        "amount": amount,
+      },
+    ],
   };
 }
 
@@ -401,6 +442,7 @@ void main() {
                 expenses: [
                   sharedExpenseJson(id: 8, title: "Market", amount: 300),
                 ],
+                settlementSummary: settlementSummaryJson(),
               ),
             ],
           }, 200);
@@ -418,6 +460,8 @@ void main() {
     expect(find.text("300 TL"), findsWidgets);
     expect(find.textContaining("Buse Test ödedi"), findsOneWidget);
     expect(find.text("Borç Durumu"), findsOneWidget);
+    expect(find.textContaining("Ödedi 300 TL • Payı 150 TL"), findsOneWidget);
+    expect(find.textContaining("Ödedi 0 TL • Payı 150 TL"), findsOneWidget);
     expect(
       find.textContaining("Ece Test, Buse Test kişisine 150 TL ödemeli"),
       findsOneWidget,

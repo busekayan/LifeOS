@@ -311,6 +311,139 @@ const respondToFriendInvitation = async (req, res) => {
   }
 };
 
+const calculateSettlementSummary = (group) => {
+  const members = Array.isArray(group.members) ? group.members : [];
+  const expenses = Array.isArray(group.expenses) ? group.expenses : [];
+  const balances = new Map();
+  const memberById = new Map();
+
+  for (const member of members) {
+    const memberId = Number(member.id);
+    balances.set(memberId, {
+      paidAmount: 0,
+      owedShare: 0,
+    });
+    memberById.set(memberId, member);
+  }
+
+  for (const expense of expenses) {
+    const amount = Number(expense.amount || 0);
+    const payer = expense.paid_by_user || {};
+    const payerId = Number(payer.id);
+
+    if (!balances.has(payerId)) {
+      balances.set(payerId, {
+        paidAmount: 0,
+        owedShare: 0,
+      });
+    }
+
+    if (!memberById.has(payerId)) {
+      memberById.set(payerId, payer);
+    }
+
+    balances.get(payerId).paidAmount += amount;
+
+    const participants = Array.isArray(expense.participants)
+      ? expense.participants
+      : [];
+
+    for (const participant of participants) {
+      const participantId = Number(participant.id);
+      const shareAmount = Number(participant.share_amount || 0);
+
+      if (!balances.has(participantId)) {
+        balances.set(participantId, {
+          paidAmount: 0,
+          owedShare: 0,
+        });
+      }
+
+      if (!memberById.has(participantId)) {
+        memberById.set(participantId, participant);
+      }
+
+      balances.get(participantId).owedShare += shareAmount;
+    }
+  }
+
+  const memberSummaries = [...balances.entries()]
+    .map(([memberId, totals]) => {
+      const member = memberById.get(memberId) || {};
+      const balance = totals.paidAmount - totals.owedShare;
+
+      return {
+        id: memberId,
+        first_name: member.first_name || "",
+        last_name: member.last_name || "",
+        email: member.email || "",
+        paid_amount: Number(totals.paidAmount.toFixed(2)),
+        owed_share: Number(totals.owedShare.toFixed(2)),
+        balance: Number(balance.toFixed(2)),
+      };
+    })
+    .sort((a, b) => a.id - b.id);
+
+  const debtors = memberSummaries
+    .filter((member) => member.balance < -0.01)
+    .map((member) => ({
+      member,
+      amount: -member.balance,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+  const creditors = memberSummaries
+    .filter((member) => member.balance > 0.01)
+    .map((member) => ({
+      member,
+      amount: member.balance,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const settlements = [];
+  let debtorIndex = 0;
+  let creditorIndex = 0;
+
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    const debtor = debtors[debtorIndex];
+    const creditor = creditors[creditorIndex];
+    const amount = Math.min(debtor.amount, creditor.amount);
+
+    if (amount > 0.01) {
+      settlements.push({
+        from_user: {
+          id: debtor.member.id,
+          first_name: debtor.member.first_name,
+          last_name: debtor.member.last_name,
+          email: debtor.member.email,
+        },
+        to_user: {
+          id: creditor.member.id,
+          first_name: creditor.member.first_name,
+          last_name: creditor.member.last_name,
+          email: creditor.member.email,
+        },
+        amount: Number(amount.toFixed(2)),
+      });
+    }
+
+    debtor.amount = Number((debtor.amount - amount).toFixed(2));
+    creditor.amount = Number((creditor.amount - amount).toFixed(2));
+
+    if (debtor.amount <= 0.01) debtorIndex++;
+    if (creditor.amount <= 0.01) creditorIndex++;
+  }
+
+  return {
+    members: memberSummaries,
+    settlements,
+  };
+};
+
+const withSettlementSummary = (group) => ({
+  ...group,
+  settlement_summary: calculateSettlementSummary(group),
+});
+
 const getBudgetGroups = async (req, res) => {
   try {
     await ensureBudgetSchema();
@@ -397,7 +530,7 @@ const getBudgetGroups = async (req, res) => {
     );
 
     return res.status(200).json({
-      groups: result.rows,
+      groups: result.rows.map(withSettlementSummary),
     });
   } catch (err) {
     console.error("GET BUDGET GROUPS ERROR:", err);
