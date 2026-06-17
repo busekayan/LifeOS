@@ -101,6 +101,29 @@ class MoodEntry {
   Color get color => moodColors[mood] ?? const Color(0xFFB8B8C8);
 }
 
+class DiaryEntry {
+  final int id;
+  final String content;
+  final DateTime date;
+
+  const DiaryEntry({
+    required this.id,
+    required this.content,
+    required this.date,
+  });
+
+  factory DiaryEntry.fromJson(Map<String, dynamic> json) {
+    return DiaryEntry(
+      id: json["id"] as int? ?? 0,
+      content: json["content"]?.toString() ?? "",
+      date: DateTime.parse(json["date"].toString()),
+    );
+  }
+
+  String get dateKey => formatDateKey(date);
+  String get displayDate => "${date.day} ${monthLabels[date.month - 1]}";
+}
+
 class ProfileScreen extends StatefulWidget {
   final HttpGet httpGet;
   final GetAccessToken getAccessToken;
@@ -122,12 +145,16 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool isLoading = true;
   bool isMoodCalendarLoading = false;
+  bool isDiaryLoading = false;
   String? errorMessage;
   String? moodCalendarError;
+  String? diaryError;
   ProfileUser? user;
   DateTime viewedMonth = DateTime.now();
   Map<String, MoodEntry> monthlyMoods = {};
   MoodEntry? selectedMood;
+  List<DiaryEntry> diaryEntries = [];
+  final Set<int> expandedDiaryIds = {};
 
   @override
   void initState() {
@@ -181,12 +208,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
         isLoading = false;
         errorMessage = null;
       });
-      await fetchMonthlyMoods(accessToken);
+      await Future.wait([
+        fetchMonthlyMoods(accessToken),
+        fetchDiaries(accessToken),
+      ]);
     } catch (_) {
       if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = "Sunucu bağlantısı kurulamadı.";
+      });
+    }
+  }
+
+  Future<void> fetchDiaries(String accessToken) async {
+    setState(() {
+      isDiaryLoading = true;
+      diaryError = null;
+    });
+
+    try {
+      final response = await widget.httpGet(
+        ApiConfig.uri("/diaries"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        setState(() {
+          isDiaryLoading = false;
+          diaryError = "Günlük kayıtları yüklenemedi.";
+        });
+        return;
+      }
+
+      final data = jsonDecode(response.body);
+      final list = data is List
+          ? data
+          : data["diaries"] as List<dynamic>? ?? [];
+      final entries =
+          list
+              .whereType<Map<String, dynamic>>()
+              .map(DiaryEntry.fromJson)
+              .toList()
+            ..sort((a, b) => b.date.compareTo(a.date));
+
+      setState(() {
+        diaryEntries = entries.take(4).toList();
+        isDiaryLoading = false;
+        diaryError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isDiaryLoading = false;
+        diaryError = "Günlük kayıtları yüklenemedi.";
       });
     }
   }
@@ -402,12 +482,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 14),
         buildMoodCalendar(),
-        buildProfilePlaceholder(
-          icon: Icons.menu_book_rounded,
-          title: "Günlük geçmişi",
-          description:
-              "Son günlük kayıtların burada kısa özetlerle listelenecek.",
-        ),
+        buildDiaryHistory(),
         buildProfilePlaceholder(
           icon: Icons.bar_chart_rounded,
           title: "Alışkanlık istatistikleri",
@@ -685,6 +760,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget buildDiaryHistory() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.menu_book_rounded,
+                  color: Color(0xFF6C63FF),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  "Günlük geçmişi",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (isDiaryLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (diaryError != null)
+            Text(
+              diaryError!,
+              style: const TextStyle(
+                color: Color(0xFFC84C4C),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            )
+          else if (diaryEntries.isEmpty)
+            Text(
+              "Henüz günlük kaydın yok. Yazdıkların burada görünecek.",
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.54),
+                fontSize: 12,
+                height: 1.3,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (var index = 0; index < diaryEntries.length; index++) ...[
+                  buildDiaryEntryTile(diaryEntries[index]),
+                  if (index != diaryEntries.length - 1)
+                    Divider(
+                      height: 14,
+                      color: Colors.black.withValues(alpha: 0.07),
+                    ),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildDiaryEntryTile(DiaryEntry entry) {
+    final isExpanded = expandedDiaryIds.contains(entry.id);
+
+    return InkWell(
+      key: ValueKey("diary-entry-${entry.id}"),
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        setState(() {
+          if (isExpanded) {
+            expandedDiaryIds.remove(entry.id);
+          } else {
+            expandedDiaryIds.add(entry.id);
+          }
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 54,
+              child: Text(
+                entry.displayDate,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.black.withValues(alpha: 0.52),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                entry.content.trim().isEmpty
+                    ? "Boş günlük kaydı"
+                    : entry.content,
+                maxLines: isExpanded ? null : 2,
+                overflow: isExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF222831),
+                  fontSize: 12,
+                  height: 1.32,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              isExpanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: Colors.black.withValues(alpha: 0.42),
+            ),
+          ],
+        ),
       ),
     );
   }

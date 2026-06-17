@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/screens/profile_screen.dart';
 
-http.Response jsonResponse(Map<String, Object?> body, int statusCode) {
+http.Response jsonResponse(Object? body, int statusCode) {
   return http.Response.bytes(
     utf8.encode(jsonEncode(body)),
     statusCode,
@@ -44,6 +44,22 @@ Widget buildProfileScreen({
                   {"mood": "sakin", "log_date": "2026-06-16"},
                 ],
               }, 200);
+            }
+
+            if (url.path == "/diaries") {
+              return jsonResponse([
+                {
+                  "id": 21,
+                  "content":
+                      "Bugün kendimi daha sakin ve üretken hissettim. Sabah kısa bir yürüyüş iyi geldi.",
+                  "date": "2026-06-15",
+                },
+                {
+                  "id": 20,
+                  "content": "Yoğun ama güzel bir gündü.",
+                  "date": "2026-06-14",
+                },
+              ], 200);
             }
 
             return jsonResponse({
@@ -95,6 +111,10 @@ void main() {
             return jsonResponse({"moods": []}, 200);
           }
 
+          if (url.path == "/diaries") {
+            return jsonResponse([], 200);
+          }
+
           return jsonResponse({
             "user": {
               "id": 7,
@@ -108,7 +128,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(requestedUrls.map((url) => url.path), ["/users/me", "/moods/month"]);
+    expect(requestedUrls.map((url) => url.path), [
+      "/users/me",
+      "/moods/month",
+      "/diaries",
+    ]);
     expect(requestedUrls[1].queryParameters["year"], "2026");
     expect(requestedUrls[1].queryParameters["month"], "6");
     expect(requestedHeaders.first?["Authorization"], "Bearer access-token");
@@ -118,6 +142,7 @@ void main() {
     expect(find.text("Buse Kayan"), findsOneWidget);
     expect(find.text("buse@example.com"), findsOneWidget);
     expect(find.text("Mood takvimi"), findsOneWidget);
+    expect(find.text("Günlük geçmişi"), findsOneWidget);
   });
 
   testWidgets("renders monthly mood calendar and mood summary", (tester) async {
@@ -147,6 +172,10 @@ void main() {
             return jsonResponse({"moods": []}, 200);
           }
 
+          if (url.path == "/diaries") {
+            return jsonResponse([], 200);
+          }
+
           return jsonResponse({
             "user": {
               "id": 7,
@@ -162,6 +191,76 @@ void main() {
 
     expect(find.text("Bu ay için mood kaydı yok."), findsOneWidget);
     expect(find.byKey(const ValueKey("mood-day-2026-06-16")), findsOneWidget);
+  });
+
+  testWidgets("renders recent diary entries and expands a diary preview", (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildProfileScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text("Günlük geçmişi"), findsOneWidget);
+    expect(find.text("15 Haziran"), findsOneWidget);
+    expect(find.text("14 Haziran"), findsOneWidget);
+    expect(
+      find.text(
+        "Bugün kendimi daha sakin ve üretken hissettim. Sabah kısa bir yürüyüş iyi geldi.",
+      ),
+      findsOneWidget,
+    );
+
+    final diaryText = tester.widget<Text>(
+      find.text(
+        "Bugün kendimi daha sakin ve üretken hissettim. Sabah kısa bir yürüyüş iyi geldi.",
+      ),
+    );
+    expect(diaryText.maxLines, 2);
+    expect(diaryText.overflow, TextOverflow.ellipsis);
+
+    await tester.ensureVisible(find.byKey(const ValueKey("diary-entry-21")));
+    await tester.drag(find.byType(ListView), const Offset(0, -180));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("diary-entry-21")));
+    await tester.pumpAndSettle();
+
+    final expandedDiaryText = tester.widget<Text>(
+      find.text(
+        "Bugün kendimi daha sakin ve üretken hissettim. Sabah kısa bir yürüyüş iyi geldi.",
+      ),
+    );
+    expect(expandedDiaryText.maxLines, null);
+    expect(expandedDiaryText.overflow, TextOverflow.visible);
+  });
+
+  testWidgets("shows empty diary state", (tester) async {
+    await tester.pumpWidget(
+      buildProfileScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path == "/moods/month") {
+            return jsonResponse({"moods": []}, 200);
+          }
+
+          if (url.path == "/diaries") {
+            return jsonResponse([], 200);
+          }
+
+          return jsonResponse({
+            "user": {
+              "id": 7,
+              "firstName": "Buse",
+              "lastName": "Kayan",
+              "email": "buse@example.com",
+            },
+          }, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text("Henüz günlük kaydın yok. Yazdıkların burada görünecek."),
+      findsOneWidget,
+    );
   });
 
   testWidgets("shows error state when profile cannot be loaded", (
