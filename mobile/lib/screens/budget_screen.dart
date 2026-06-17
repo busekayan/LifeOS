@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../services/token_storage.dart';
 import '../widgets/app_bottom_navigation_bar.dart';
+import '../widgets/app_toast.dart';
 
 typedef HttpGet =
     Future<http.Response> Function(Uri url, {Map<String, String>? headers});
@@ -476,6 +478,48 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return "$rounded TL";
   }
 
+  List<TextInputFormatter> get amountInputFormatters => [
+    TextInputFormatter.withFunction((oldValue, newValue) {
+      final buffer = StringBuffer();
+      var hasDecimalSeparator = false;
+      var decimalCount = 0;
+
+      for (final char in newValue.text.characters) {
+        if (RegExp(r"\d").hasMatch(char)) {
+          if (hasDecimalSeparator) {
+            if (decimalCount >= 2) continue;
+            decimalCount += 1;
+          }
+          buffer.write(char);
+          continue;
+        }
+
+        if (char == "." && !hasDecimalSeparator) {
+          hasDecimalSeparator = true;
+          buffer.write(char);
+        }
+      }
+
+      final sanitized = buffer.toString();
+      return TextEditingValue(
+        text: sanitized,
+        selection: TextSelection.collapsed(offset: sanitized.length),
+      );
+    }),
+  ];
+
+  void showBudgetFeedback({
+    required String message,
+    bool isSuccess = false,
+    BuildContext? messengerContext,
+  }) {
+    showAppToast(
+      messengerContext ?? context,
+      message: message,
+      isSuccess: isSuccess,
+    );
+  }
+
   String invitationErrorMessage(String message) {
     if (message == "Friend invitation is already pending") {
       return "Bu kişiye gönderilmiş bekleyen davet var.";
@@ -614,10 +658,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> showCreateGroupDialog() async {
     if (friends.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Grup oluşturmak için önce arkadaş eklemelisin."),
-        ),
+      showBudgetFeedback(
+        message: "Grup oluşturmak için önce arkadaş eklemelisin.",
       );
       return;
     }
@@ -710,9 +752,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showBudgetFeedback(message: "Oturum bulunamadı.");
         return;
       }
 
@@ -736,28 +776,23 @@ class _BudgetScreenState extends State<BudgetScreen> {
           );
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Ortak bütçe grubu oluşturuldu.")),
+        showBudgetFeedback(
+          message: "Ortak bütçe grubu oluşturuldu.",
+          isSuccess: true,
         );
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Ortak bütçe grubu oluşturulamadı.")),
-      );
+      showBudgetFeedback(message: "Ortak bütçe grubu oluşturulamadı.");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showBudgetFeedback(message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
   Future<void> showCreateSharedExpenseDialog(BudgetGroup group) async {
     if (group.members.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Bu grupta gider eklenebilecek üye yok.")),
-      );
+      showBudgetFeedback(message: "Bu grupta gider eklenebilecek üye yok.");
       return;
     }
 
@@ -883,7 +918,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             Expanded(
                               child: TextField(
                                 controller: amountController,
-                                keyboardType: TextInputType.number,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: amountInputFormatters,
                                 decoration: fieldDecoration("Tutar"),
                               ),
                             ),
@@ -979,12 +1018,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                       amount <= 0 ||
                                       !hasValidDate ||
                                       selectedParticipantIds.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Gider bilgilerini kontrol et.",
-                                        ),
-                                      ),
+                                    showBudgetFeedback(
+                                      message:
+                                          "Başlık, tutar, tarih ve katılımcıları kontrol et.",
+                                      messengerContext: context,
                                     );
                                     return;
                                   }
@@ -1042,9 +1079,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showBudgetFeedback(message: "Oturum bulunamadı.");
         return;
       }
 
@@ -1107,9 +1142,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           }
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Ortak gider eklendi.")));
+        showBudgetFeedback(message: "Ortak gider eklendi.", isSuccess: true);
         return;
       }
 
@@ -1121,14 +1154,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
         // Keep the fallback message when the server returns a non-JSON error.
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showBudgetFeedback(message: message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showBudgetFeedback(message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -1156,8 +1185,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
             TextButton(
               onPressed: () {
                 if (!emailController.text.trim().contains("@")) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Geçerli bir e-posta gir.")),
+                  showBudgetFeedback(
+                    message: "Geçerli bir e-posta gir.",
+                    messengerContext: context,
                   );
                   return;
                 }
@@ -1182,9 +1212,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showBudgetFeedback(message: "Oturum bulunamadı.");
         return;
       }
 
@@ -1200,8 +1228,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Arkadaş daveti gönderildi.")),
+        showBudgetFeedback(
+          message: "Arkadaş daveti gönderildi.",
+          isSuccess: true,
         );
         return;
       }
@@ -1214,14 +1243,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
         // Keep the fallback message when the server returns a non-JSON error.
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showBudgetFeedback(message: message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showBudgetFeedback(message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -1234,9 +1259,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showBudgetFeedback(message: "Oturum bulunamadı.");
         return;
       }
 
@@ -1261,26 +1284,19 @@ class _BudgetScreenState extends State<BudgetScreen> {
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              action == "accept"
-                  ? "Arkadaş daveti kabul edildi."
-                  : "Arkadaş daveti reddedildi.",
-            ),
-          ),
+        showBudgetFeedback(
+          message: action == "accept"
+              ? "Arkadaş daveti kabul edildi."
+              : "Arkadaş daveti reddedildi.",
+          isSuccess: true,
         );
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Arkadaş daveti güncellenemedi.")),
-      );
+      showBudgetFeedback(message: "Arkadaş daveti güncellenemedi.");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showBudgetFeedback(message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -1323,7 +1339,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     ),
                     TextField(
                       controller: amountController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: amountInputFormatters,
                       decoration: const InputDecoration(labelText: "Tutar"),
                     ),
                     TextField(
@@ -1361,10 +1380,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
                         amount == null ||
                         amount <= 0 ||
                         !hasValidDate) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("İşlem bilgilerini kontrol et."),
-                        ),
+                      showBudgetFeedback(
+                        message: "Başlık, tutar ve tarihi kontrol et.",
+                        messengerContext: context,
                       );
                       return;
                     }
@@ -1403,9 +1421,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showBudgetFeedback(message: "Oturum bulunamadı.");
         return;
       }
 
@@ -1449,20 +1465,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
           );
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("İşlem eklendi.")));
+        showBudgetFeedback(message: "İşlem eklendi.", isSuccess: true);
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("İşlem eklenemedi.")));
+      showBudgetFeedback(message: "İşlem eklenemedi.");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showBudgetFeedback(message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 

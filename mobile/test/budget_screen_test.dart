@@ -464,7 +464,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(postedBody, isNull);
-    expect(find.text("İşlem bilgilerini kontrol et."), findsOneWidget);
+    expect(find.text("Başlık, tutar ve tarihi kontrol et."), findsOneWidget);
+  });
+
+  testWidgets("prevents letters in personal transaction amount", (
+    tester,
+  ) async {
+    await setLargeTestScreen(tester);
+    await tester.pumpWidget(buildBudgetScreen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Gelir Ekle"));
+    await tester.pumpAndSettle();
+
+    final amountField = find.byType(TextField).at(1);
+    await tester.enterText(amountField, "12abc34.567");
+    await tester.pump();
+
+    expect(find.text("1234.56"), findsOneWidget);
   });
 
   testWidgets("shows empty shared budget group state", (tester) async {
@@ -723,7 +740,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(postedBody, isNull);
-    expect(find.text("Gider bilgilerini kontrol et."), findsOneWidget);
+    expect(
+      find.text("Başlık, tutar, tarih ve katılımcıları kontrol et."),
+      findsOneWidget,
+    );
   });
 
   testWidgets("sends a friend invitation by email", (tester) async {

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../services/token_storage.dart';
+import '../widgets/app_toast.dart';
 
 typedef HttpPost =
     Future<http.Response> Function(
@@ -104,9 +105,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     }
 
     if (selectedDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("En az bir gün seçmelisin.")),
-      );
+      showAppToast(context, message: "En az bir gün seçmelisin.");
       return;
     }
 
@@ -114,10 +113,9 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
     if (accessToken == null || accessToken.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Oturum bulunamadı. Lütfen tekrar giriş yap."),
-        ),
+      showAppToast(
+        context,
+        message: "Oturum bulunamadı. Lütfen tekrar giriş yap.",
       );
       return;
     }
@@ -174,8 +172,10 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Alışkanlık başarıyla eklendi.")),
+        showAppToast(
+          context,
+          message: "Alışkanlık başarıyla eklendi.",
+          isSuccess: true,
         );
         if (widget.popOnSuccess) {
           Navigator.pop(context, true);
@@ -186,22 +186,16 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       try {
         final data = jsonDecode(response.body);
         final message = data["message"] ?? "Alışkanlık eklenemedi.";
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        showAppToast(context, message: message);
       } catch (_) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Alışkanlık eklenemedi.")));
+        showAppToast(context, message: "Alışkanlık eklenemedi.");
       }
     } catch (e) {
       print("ADD HABIT ERROR: $e");
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     } finally {
       if (mounted) {
         setState(() {

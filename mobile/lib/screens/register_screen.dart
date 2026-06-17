@@ -152,32 +152,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
   InputDecoration customInputDecoration(String hintText) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
-      ),
-      errorStyle: const TextStyle(
-        color: Colors.redAccent,
-        fontSize: 12,
+      hintStyle: TextStyle(
+        color: Colors.black.withValues(alpha: 0.38),
         fontWeight: FontWeight.w600,
       ),
+      errorStyle: const TextStyle(
+        color: Color(0xFFC84C4C),
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      ),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.15),
+      fillColor: const Color(0xFFF7F5FC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.white70, width: 1.2),
+        borderSide: const BorderSide(color: Color(0xFFE8E1F5), width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.white, width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 1.2),
+        borderSide: const BorderSide(color: Color(0xFFC84C4C), width: 1.2),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFFC84C4C), width: 1.5),
       ),
     );
   }
@@ -201,12 +202,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/background_login.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
+        color: const Color(0xFFF6F2FF),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -223,12 +219,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Spacer(),
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF6C63FF,
+                            ).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: const Icon(
+                            Icons.person_add_alt_1_rounded,
+                            color: Color(0xFF6C63FF),
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
                         const Text(
-                          'Register',
+                          'Hesap oluştur',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 52,
-                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF222831),
+                            fontSize: 38,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'LifeOS düzenini kişiselleştirmek için birkaç bilgi yeterli.',
+                          style: TextStyle(
+                            color: Colors.black.withValues(alpha: 0.56),
+                            fontSize: 15,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -236,8 +258,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.20),
-                            borderRadius: BorderRadius.circular(24),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 24,
+                                offset: const Offset(0, 14),
+                              ),
+                            ],
                           ),
                           child: Form(
                             key: _formKey,
@@ -245,10 +274,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const Text(
-                                  "Name",
+                                  "İsim",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -257,12 +286,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   textInputAction: TextInputAction.next,
                                   textCapitalization: TextCapitalization.words,
                                   style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  decoration: customInputDecoration(
-                                    "Enter your name",
-                                  ),
+                                  decoration: customInputDecoration("Adın"),
                                   validator: (value) {
                                     final text = value?.trim() ?? "";
 
@@ -277,10 +304,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const SizedBox(height: 18),
 
                                 const Text(
-                                  "Surname",
+                                  "Soyisim",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -289,12 +316,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   textInputAction: TextInputAction.next,
                                   textCapitalization: TextCapitalization.words,
                                   style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  decoration: customInputDecoration(
-                                    "Enter your surname",
-                                  ),
+                                  decoration: customInputDecoration("Soyadın"),
                                   validator: (value) {
                                     final text = value?.trim() ?? "";
 
@@ -311,8 +336,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const Text(
                                   "Email",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -323,11 +348,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   enableSuggestions: false,
                                   textInputAction: TextInputAction.next,
                                   style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   decoration: customInputDecoration(
-                                    "Enter your email",
+                                    "Email adresin",
                                   ),
                                   validator: (value) {
                                     final text = value?.trim() ?? "";
@@ -351,10 +376,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const SizedBox(height: 18),
 
                                 const Text(
-                                  "Password",
+                                  "Şifre",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -363,11 +388,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   obscureText: true,
                                   textInputAction: TextInputAction.next,
                                   style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   decoration: customInputDecoration(
-                                    "Enter your password",
+                                    "En az 6 karakter",
                                   ),
                                   validator: (value) {
                                     final text = value?.trim() ?? "";
@@ -387,10 +412,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 const SizedBox(height: 18),
 
                                 const Text(
-                                  "Confirm Password",
+                                  "Şifre tekrarı",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -404,11 +429,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     }
                                   },
                                   style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF222831),
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   decoration: customInputDecoration(
-                                    "Enter your password again",
+                                    "Şifreni tekrar gir",
                                   ),
                                   validator: (value) {
                                     final text = value?.trim() ?? "";
@@ -433,13 +458,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   height: 52,
                                   child: OutlinedButton(
                                     onPressed: isLoading ? null : registerUser,
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(
-                                        color: Colors.white,
-                                        width: 1.5,
-                                      ),
+                                    style: ElevatedButton.styleFrom(
                                       foregroundColor: Colors.white,
-                                      backgroundColor: Colors.transparent,
+                                      backgroundColor: const Color(0xFF6C63FF),
+                                      disabledBackgroundColor: const Color(
+                                        0xFFB9B3EA,
+                                      ),
+                                      elevation: 0,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(14),
                                       ),
@@ -470,10 +495,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     Navigator.pop(context);
                                   },
                                   child: const Text(
-                                    "Back to Login",
+                                    "Girişe dön",
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF6C63FF),
+                                      fontWeight: FontWeight.w900,
                                     ),
                                   ),
                                 ),
@@ -578,7 +603,7 @@ class _TopBannerState extends State<_TopBanner>
                     vertical: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: backgroundColor.withOpacity(0.95),
+                    color: backgroundColor.withValues(alpha: 0.95),
                     borderRadius: BorderRadius.circular(18),
                     boxShadow: const [
                       BoxShadow(

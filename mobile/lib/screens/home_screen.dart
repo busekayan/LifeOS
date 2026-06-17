@@ -6,6 +6,7 @@ import '../config/api_config.dart';
 import '../navigation/no_transition_page_route.dart';
 import '../services/token_storage.dart';
 import '../widgets/app_bottom_navigation_bar.dart';
+import '../widgets/app_toast.dart';
 import 'add_habit_screen.dart';
 
 typedef HttpGet =
@@ -186,9 +187,7 @@ class _HomePageState extends State<HomePage> {
           isLoading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Oturum açma bilgileri bulunamadı.")),
-        );
+        showAppToast(context, message: "Oturum açma bilgileri bulunamadı.");
         return;
       }
 
@@ -219,9 +218,7 @@ class _HomePageState extends State<HomePage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Alışkanlıklar alınamadı.")));
+      showAppToast(context, message: "Alışkanlıklar alınamadı.");
     } catch (e) {
       if (!mounted) return;
 
@@ -229,9 +226,7 @@ class _HomePageState extends State<HomePage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -250,9 +245,7 @@ class _HomePageState extends State<HomePage> {
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showAppToast(context, message: "Oturum bulunamadı.");
         return;
       }
 
@@ -278,14 +271,10 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Alışkanlık durumu güncellenemedi.")),
-      );
+      showAppToast(context, message: "Alışkanlık durumu güncellenemedi.");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -390,10 +379,9 @@ class _HomePageState extends State<HomePage> {
                       final int? value = int.tryParse(controller.text.trim());
 
                       if (value == null || value < 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Geçerli bir değer gir."),
-                          ),
+                        showAppToast(
+                          context,
+                          message: "Geçerli bir değer gir.",
                         );
                         return;
                       }
@@ -449,15 +437,11 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("İlerleme güncellenemedi.")));
+      showAppToast(context, message: "İlerleme güncellenemedi.");
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -496,9 +480,7 @@ class _HomePageState extends State<HomePage> {
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showAppToast(context, message: "Oturum bulunamadı.");
         return;
       }
 
@@ -517,21 +499,15 @@ class _HomePageState extends State<HomePage> {
           allHabits.removeWhere((item) => item.id == habit.id);
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Alışkanlık silindi.")));
+        showAppToast(context, message: "Alışkanlık silindi.", isSuccess: true);
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Alışkanlık silinemedi.")));
+      showAppToast(context, message: "Alışkanlık silinemedi.");
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
@@ -579,9 +555,7 @@ class _HomePageState extends State<HomePage> {
       if (accessToken == null || accessToken.isEmpty) {
         if (!mounted) return;
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Oturum bulunamadı.")));
+        showAppToast(context, message: "Oturum bulunamadı.");
         return;
       }
 
@@ -602,21 +576,19 @@ class _HomePageState extends State<HomePage> {
           );
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Template planı silindi.")),
+        showAppToast(
+          context,
+          message: "Template planı silindi.",
+          isSuccess: true,
         );
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Template planı silinemedi.")),
-      );
+      showAppToast(context, message: "Template planı silinemedi.");
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Sunucu bağlantısı kurulamadı.")),
-      );
+      showAppToast(context, message: "Sunucu bağlantısı kurulamadı.");
     }
   }
 
