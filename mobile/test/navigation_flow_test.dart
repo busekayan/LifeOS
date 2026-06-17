@@ -112,7 +112,7 @@ void main() {
 
     await tester.tap(find.text("Open Register"));
     await tester.pumpAndSettle();
-    expect(find.text("Register"), findsOneWidget);
+    expect(find.text("Hesap oluştur"), findsOneWidget);
 
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), "Buse");
@@ -126,7 +126,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Open Register"), findsOneWidget);
-    expect(find.text("Register"), findsNothing);
+    expect(find.text("Hesap oluştur"), findsNothing);
 
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
