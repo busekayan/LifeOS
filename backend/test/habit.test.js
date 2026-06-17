@@ -55,6 +55,7 @@ require.cache[require.resolve("../config/db")] = { exports: mockPool };
 const {
   createHabit,
   getHabits,
+  getHabitSummary,
   deleteHabit,
 } = require("../controllers/habitController");
 const {
@@ -226,6 +227,59 @@ describe("habit APIs", () => {
 
     assert.equal(res.statusCode, 400);
     assert.equal(res.body.message, "date query parameter is required");
+    assert.equal(mockPool.queries.length, 0);
+  });
+
+  it("returns habit completion summary for recent activity", async () => {
+    mockPool.queue.push({
+      rows: [
+        {
+          log_date: "2026-06-15",
+          planned_count: 3,
+          completed_count: 2,
+          missed_count: 1,
+        },
+        {
+          log_date: new Date("2026-06-16T00:00:00.000Z"),
+          planned_count: 2,
+          completed_count: 1,
+          missed_count: 1,
+        },
+      ],
+    });
+
+    const req = authenticatedRequest({
+      query: { days: "7", end_date: "2026-06-16" },
+    });
+    const res = createResponse();
+
+    await getHabitSummary(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.match(mockPool.queries[0].sql, /WITH date_range AS/i);
+    assert.deepEqual(mockPool.queries[0].params, [7, "2026-06-16", 7]);
+    assert.deepEqual(res.body.summary, {
+      totalPlanned: 5,
+      completed: 3,
+      missed: 2,
+      completionRate: 60,
+      days: [
+        { date: "2026-06-15", planned: 3, completed: 2, missed: 1 },
+        { date: "2026-06-16", planned: 2, completed: 1, missed: 1 },
+      ],
+    });
+  });
+
+  it("rejects invalid habit summary filters", async () => {
+    const req = authenticatedRequest({
+      query: { days: "120", end_date: "2026-06-16" },
+    });
+    const res = createResponse();
+
+    await getHabitSummary(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.message, "days must be an integer between 1 and 90");
     assert.equal(mockPool.queries.length, 0);
   });
 

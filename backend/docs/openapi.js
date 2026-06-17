@@ -340,6 +340,63 @@ const openApiSpec = {
         },
       },
     },
+    "/habits/summary": {
+      get: {
+        tags: ["Habits"],
+        summary: "Get habit completion summary",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "days",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 90, example: 30 },
+          },
+          {
+            name: "end_date",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "date" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Habit completion summary",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    summary: {
+                      type: "object",
+                      properties: {
+                        totalPlanned: { type: "integer" },
+                        completed: { type: "integer" },
+                        missed: { type: "integer" },
+                        completionRate: { type: "integer" },
+                        days: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              date: { type: "string", format: "date" },
+                              planned: { type: "integer" },
+                              completed: { type: "integer" },
+                              missed: { type: "integer" },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: "#/components/responses/ValidationError" },
+          401: { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/habits/{id}": {
       delete: {
         tags: ["Habits"],

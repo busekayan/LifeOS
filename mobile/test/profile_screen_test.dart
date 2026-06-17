@@ -62,6 +62,37 @@ Widget buildProfileScreen({
               ], 200);
             }
 
+            if (url.path == "/habits/summary") {
+              return jsonResponse({
+                "summary": {
+                  "totalPlanned": 12,
+                  "completed": 8,
+                  "missed": 4,
+                  "completionRate": 67,
+                  "days": [
+                    {
+                      "date": "2026-06-14",
+                      "planned": 4,
+                      "completed": 3,
+                      "missed": 1,
+                    },
+                    {
+                      "date": "2026-06-15",
+                      "planned": 4,
+                      "completed": 2,
+                      "missed": 2,
+                    },
+                    {
+                      "date": "2026-06-16",
+                      "planned": 4,
+                      "completed": 3,
+                      "missed": 1,
+                    },
+                  ],
+                },
+              }, 200);
+            }
+
             return jsonResponse({
               "user": {
                 "id": 7,
@@ -115,6 +146,18 @@ void main() {
             return jsonResponse([], 200);
           }
 
+          if (url.path == "/habits/summary") {
+            return jsonResponse({
+              "summary": {
+                "totalPlanned": 0,
+                "completed": 0,
+                "missed": 0,
+                "completionRate": 0,
+                "days": [],
+              },
+            }, 200);
+          }
+
           return jsonResponse({
             "user": {
               "id": 7,
@@ -132,9 +175,12 @@ void main() {
       "/users/me",
       "/moods/month",
       "/diaries",
+      "/habits/summary",
     ]);
     expect(requestedUrls[1].queryParameters["year"], "2026");
     expect(requestedUrls[1].queryParameters["month"], "6");
+    expect(requestedUrls[3].queryParameters["days"], "30");
+    expect(requestedUrls[3].queryParameters["end_date"], "2026-06-16");
     expect(requestedHeaders.first?["Authorization"], "Bearer access-token");
     expect(requestedHeaders.last?["Authorization"], "Bearer access-token");
     expect(find.text("Profil"), findsWidgets);
@@ -174,6 +220,18 @@ void main() {
 
           if (url.path == "/diaries") {
             return jsonResponse([], 200);
+          }
+
+          if (url.path == "/habits/summary") {
+            return jsonResponse({
+              "summary": {
+                "totalPlanned": 0,
+                "completed": 0,
+                "missed": 0,
+                "completionRate": 0,
+                "days": [],
+              },
+            }, 200);
           }
 
           return jsonResponse({
@@ -244,6 +302,18 @@ void main() {
             return jsonResponse([], 200);
           }
 
+          if (url.path == "/habits/summary") {
+            return jsonResponse({
+              "summary": {
+                "totalPlanned": 0,
+                "completed": 0,
+                "missed": 0,
+                "completionRate": 0,
+                "days": [],
+              },
+            }, 200);
+          }
+
           return jsonResponse({
             "user": {
               "id": 7,
@@ -259,6 +329,69 @@ void main() {
 
     expect(
       find.text("Henüz günlük kaydın yok. Yazdıkların burada görünecek."),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets("renders habit completion statistics", (tester) async {
+    await tester.pumpWidget(buildProfileScreen());
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -650));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Alışkanlık istatistikleri"), findsOneWidget);
+    expect(find.text("%67"), findsOneWidget);
+    expect(find.text("Tamamlanan"), findsOneWidget);
+    expect(find.text("Kaçan"), findsOneWidget);
+    expect(find.text("8"), findsWidgets);
+    expect(find.text("4"), findsWidgets);
+    expect(find.text("Tamamlandı"), findsOneWidget);
+    expect(find.text("Kaçtı"), findsOneWidget);
+  });
+
+  testWidgets("shows empty habit statistics state", (tester) async {
+    await tester.pumpWidget(
+      buildProfileScreen(
+        httpGet: (Uri url, {Map<String, String>? headers}) async {
+          if (url.path == "/moods/month") {
+            return jsonResponse({"moods": []}, 200);
+          }
+
+          if (url.path == "/diaries") {
+            return jsonResponse([], 200);
+          }
+
+          if (url.path == "/habits/summary") {
+            return jsonResponse({
+              "summary": {
+                "totalPlanned": 0,
+                "completed": 0,
+                "missed": 0,
+                "completionRate": 0,
+                "days": [],
+              },
+            }, 200);
+          }
+
+          return jsonResponse({
+            "user": {
+              "id": 7,
+              "firstName": "Buse",
+              "lastName": "Kayan",
+              "email": "buse@example.com",
+            },
+          }, 200);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -650));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        "İstatistik oluşturmak için henüz yeterli alışkanlık verisi yok.",
+      ),
       findsOneWidget,
     );
   });

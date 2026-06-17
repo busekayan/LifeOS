@@ -265,6 +265,109 @@ const getHabits = async (req, res) => {
   }
 };
 
+const formatDate = (value) => {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return value?.toString().slice(0, 10);
+};
+
+const getHabitSummary = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const days = Number(req.query.days || 30);
+    const endDate = req.query.end_date;
+
+    if (!Number.isInteger(days) || days < 1 || days > 90) {
+      return res.status(400).json({
+        message: "days must be an integer between 1 and 90",
+      });
+    }
+
+    if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return res.status(400).json({
+        message: "end_date is required in YYYY-MM-DD format",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      WITH date_range AS (
+        SELECT generate_series(
+          $2::date - (($3::int - 1) * interval '1 day'),
+          $2::date,
+          interval '1 day'
+        )::date AS log_date
+      ),
+      planned AS (
+        SELECT
+          d.log_date,
+          h.id AS habit_id,
+          h.target_value
+        FROM date_range d
+        JOIN habits h
+          ON h.user_id = $1
+          AND h.created_at::date <= d.log_date
+        JOIN habit_days hd
+          ON hd.habit_id = h.id
+          AND hd.day_of_week = EXTRACT(ISODOW FROM d.log_date)::int
+      ),
+      evaluated AS (
+        SELECT
+          p.log_date,
+          CASE
+            WHEN p.target_value IS NOT NULL THEN COALESCE(hl.value, 0) >= p.target_value
+            ELSE hl.id IS NOT NULL
+          END AS is_completed
+        FROM planned p
+        LEFT JOIN habit_logs hl
+          ON hl.habit_id = p.habit_id
+          AND hl.user_id = $1
+          AND hl.log_date = p.log_date
+      )
+      SELECT
+        log_date,
+        COUNT(*)::int AS planned_count,
+        COUNT(*) FILTER (WHERE is_completed)::int AS completed_count,
+        COUNT(*) FILTER (WHERE NOT is_completed)::int AS missed_count
+      FROM evaluated
+      GROUP BY log_date
+      ORDER BY log_date ASC
+      `,
+      [userId, endDate, days]
+    );
+
+    const daysSummary = result.rows.map((row) => ({
+      date: formatDate(row.log_date),
+      planned: Number(row.planned_count),
+      completed: Number(row.completed_count),
+      missed: Number(row.missed_count),
+    }));
+    const totalPlanned = daysSummary.reduce((sum, day) => sum + day.planned, 0);
+    const completed = daysSummary.reduce((sum, day) => sum + day.completed, 0);
+    const missed = daysSummary.reduce((sum, day) => sum + day.missed, 0);
+    const completionRate =
+      totalPlanned === 0 ? 0 : Math.round((completed / totalPlanned) * 100);
+
+    return res.status(200).json({
+      summary: {
+        totalPlanned,
+        completed,
+        missed,
+        completionRate,
+        days: daysSummary,
+      },
+    });
+  } catch (err) {
+    console.error("GET HABIT SUMMARY ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 const deleteHabit = async (req, res) => {
   const habitId = Number(req.params.id);
 
@@ -339,4 +442,4 @@ const deleteHabit = async (req, res) => {
   }
 };
 
-module.exports = { createHabit, getHabits, deleteHabit };
+module.exports = { createHabit, getHabits, getHabitSummary, deleteHabit };

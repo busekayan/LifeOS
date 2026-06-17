@@ -124,6 +124,62 @@ class DiaryEntry {
   String get displayDate => "${date.day} ${monthLabels[date.month - 1]}";
 }
 
+class HabitStatsDay {
+  final DateTime date;
+  final int planned;
+  final int completed;
+  final int missed;
+
+  const HabitStatsDay({
+    required this.date,
+    required this.planned,
+    required this.completed,
+    required this.missed,
+  });
+
+  factory HabitStatsDay.fromJson(Map<String, dynamic> json) {
+    return HabitStatsDay(
+      date: DateTime.parse(json["date"].toString()),
+      planned: json["planned"] as int? ?? 0,
+      completed: json["completed"] as int? ?? 0,
+      missed: json["missed"] as int? ?? 0,
+    );
+  }
+}
+
+class HabitStatsSummary {
+  final int totalPlanned;
+  final int completed;
+  final int missed;
+  final int completionRate;
+  final List<HabitStatsDay> days;
+
+  const HabitStatsSummary({
+    required this.totalPlanned,
+    required this.completed,
+    required this.missed,
+    required this.completionRate,
+    required this.days,
+  });
+
+  factory HabitStatsSummary.fromJson(Map<String, dynamic> json) {
+    final days = (json["days"] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(HabitStatsDay.fromJson)
+        .toList();
+
+    return HabitStatsSummary(
+      totalPlanned: json["totalPlanned"] as int? ?? 0,
+      completed: json["completed"] as int? ?? 0,
+      missed: json["missed"] as int? ?? 0,
+      completionRate: json["completionRate"] as int? ?? 0,
+      days: days,
+    );
+  }
+
+  bool get hasData => totalPlanned > 0 && days.isNotEmpty;
+}
+
 class ProfileScreen extends StatefulWidget {
   final HttpGet httpGet;
   final GetAccessToken getAccessToken;
@@ -146,14 +202,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool isLoading = true;
   bool isMoodCalendarLoading = false;
   bool isDiaryLoading = false;
+  bool isHabitStatsLoading = false;
   String? errorMessage;
   String? moodCalendarError;
   String? diaryError;
+  String? habitStatsError;
   ProfileUser? user;
   DateTime viewedMonth = DateTime.now();
   Map<String, MoodEntry> monthlyMoods = {};
   MoodEntry? selectedMood;
   List<DiaryEntry> diaryEntries = [];
+  HabitStatsSummary? habitStats;
   final Set<int> expandedDiaryIds = {};
 
   @override
@@ -211,6 +270,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await Future.wait([
         fetchMonthlyMoods(accessToken),
         fetchDiaries(accessToken),
+        fetchHabitStats(accessToken),
       ]);
     } catch (_) {
       if (!mounted) return;
@@ -267,6 +327,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         isDiaryLoading = false;
         diaryError = "Günlük kayıtları yüklenemedi.";
+      });
+    }
+  }
+
+  Future<void> fetchHabitStats(String accessToken) async {
+    setState(() {
+      isHabitStatsLoading = true;
+      habitStatsError = null;
+    });
+
+    try {
+      final response = await widget.httpGet(
+        ApiConfig.uri("/habits/summary", {
+          "days": "30",
+          "end_date": formatDateKey(widget.currentDate()),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        setState(() {
+          isHabitStatsLoading = false;
+          habitStatsError = "Alışkanlık istatistikleri yüklenemedi.";
+        });
+        return;
+      }
+
+      final data = jsonDecode(response.body);
+      setState(() {
+        habitStats = HabitStatsSummary.fromJson(
+          data["summary"] as Map<String, dynamic>? ?? {},
+        );
+        isHabitStatsLoading = false;
+        habitStatsError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isHabitStatsLoading = false;
+        habitStatsError = "Alışkanlık istatistikleri yüklenemedi.";
       });
     }
   }
@@ -483,12 +588,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 14),
         buildMoodCalendar(),
         buildDiaryHistory(),
-        buildProfilePlaceholder(
-          icon: Icons.bar_chart_rounded,
-          title: "Alışkanlık istatistikleri",
-          description:
-              "Tamamlama oranların ve haftalık ilerlemen burada olacak.",
-        ),
+        buildHabitStats(),
       ],
     );
   }
@@ -767,7 +867,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget buildDiaryHistory() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -794,7 +894,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Expanded(
                 child: Text(
                   "Günlük geçmişi",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    color: Color(0xFF222831),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
@@ -904,6 +1008,323 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget buildHabitStats() {
+    final stats = habitStats;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFC857).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.bar_chart_rounded,
+                  color: Color(0xFFFFC857),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  "Alışkanlık istatistikleri",
+                  style: TextStyle(
+                    color: Color(0xFF222831),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (isHabitStatsLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (habitStatsError != null)
+            Text(
+              habitStatsError!,
+              style: const TextStyle(
+                color: Color(0xFFC84C4C),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            )
+          else if (stats == null || !stats.hasData)
+            Text(
+              "İstatistik oluşturmak için henüz yeterli alışkanlık verisi yok.",
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.54),
+                fontSize: 12,
+                height: 1.3,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else ...[
+            buildHabitProgressOverview(stats),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F5FC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFECE7F6)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Son günler",
+                    style: TextStyle(
+                      color: Color(0xFF222831),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 68,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: stats.days
+                          .take(14)
+                          .map(buildHabitStatsBar)
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                buildHabitLegendDot(
+                  label: "Tamamlandı",
+                  color: const Color(0xFF5BC0BE),
+                ),
+                const SizedBox(width: 12),
+                buildHabitLegendDot(
+                  label: "Kaçtı",
+                  color: const Color(0xFFFF9A8B),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget buildHabitProgressOverview(HabitStatsSummary stats) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 92,
+          height: 92,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: CircularProgressIndicator(
+                  value: stats.completionRate / 100,
+                  strokeWidth: 8,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: const Color(0xFFECE7F6),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF5BC0BE),
+                  ),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "%${stats.completionRate}",
+                    style: const TextStyle(
+                      color: Color(0xFF222831),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Text(
+                    "tutarlılık",
+                    style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            children: [
+              buildHabitStatsPill(
+                label: "Tamamlanan",
+                value: stats.completed,
+                color: const Color(0xFF5BC0BE),
+                icon: Icons.check_rounded,
+              ),
+              const SizedBox(height: 8),
+              buildHabitStatsPill(
+                label: "Kaçan",
+                value: stats.missed,
+                color: const Color(0xFFFF9A8B),
+                icon: Icons.close_rounded,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildHabitStatsPill({
+    required String label,
+    required int value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 15),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF56515F),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            value.toString(),
+            style: const TextStyle(
+              color: Color(0xFF222831),
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildHabitStatsBar(HabitStatsDay day) {
+    final total = day.planned == 0 ? 1 : day.planned;
+    final completedFlex = day.completed.clamp(0, total);
+    final missedFlex = day.missed.clamp(0, total);
+    final emptyFlex = (total - completedFlex - missedFlex).clamp(0, total);
+
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Container(
+                width: 10,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAE5F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (emptyFlex > 0)
+                      Expanded(flex: emptyFlex, child: const SizedBox.shrink()),
+                    if (missedFlex > 0)
+                      Expanded(
+                        flex: missedFlex,
+                        child: Container(color: const Color(0xFFFF9A8B)),
+                      ),
+                    if (completedFlex > 0)
+                      Expanded(
+                        flex: completedFlex,
+                        child: Container(color: const Color(0xFF5BC0BE)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              day.date.day.toString(),
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.42),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildHabitLegendDot({required String label, required Color color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.black.withValues(alpha: 0.58),
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 
